@@ -10,6 +10,7 @@
 #include "oatpp/parser/json/mapping/ObjectMapper.hpp"
 #include "oatpp/core/macro/codegen.hpp"
 #include "oatpp/core/macro/component.hpp"
+#include "oatpp-websocket/Handshaker.hpp"
 
 #include OATPP_CODEGEN_BEGIN(ApiController)
 
@@ -40,6 +41,13 @@ class TestAppController : public oatpp::web::server::api::ApiController {
     response->putHeader(Header::CONTENT_TYPE, "text/html");
     return response;
   }
+
+  ENDPOINT("GET", "ws", ws, REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    return oatpp::websocket::Handshaker::serversideHandshake(request->getHeaders(), websocketConnectionHandler);
+  };
+
+ private:
+  OATPP_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, websocketConnectionHandler, "websocket");
 
 };
 

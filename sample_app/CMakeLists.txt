@@ -9,7 +9,18 @@ set(CMAKE_CXX_STANDARD 17)
 
 ################################
 # Executable
-add_executable(sample_app main.cpp Endpoint.cpp Endpoint.h SwaggerComponent.h controller/TestAppController.h)
+add_executable(sample_app
+    "main.cpp"
+    "debug-server/Endpoint.cpp"
+    "debug-server/Endpoint.h"
+    "debug-server/SwaggerComponent.h"
+    "debug-server/controller/TestAppController.h"
+    "debug-server/websocket/WSListener.cpp"
+    "debug-server/websocket/WSListener.h"
+    "debug-server/Logger.h"
+    "debug-server/Logger.cpp"
+    "debug-server/MessageInterface.h"
+    "debugger/QuirrelDebugger.h" "debugger/QuirrelDebugger.cpp")
 
 ################################
 # Dependencies
@@ -26,6 +37,11 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/oatpp/oatpp-swagger.git
         GIT_TAG effa2635fc772260f17117bd15e256a44fdbbc18
 )
+FetchContent_Declare(
+        oatpp-websocket
+        GIT_REPOSITORY https://github.com/oatpp/oatpp-websocket.git
+        GIT_TAG 36c3ceaf4706e54390d020390081203fa2cc693c
+)
 set(OATPP_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(oatpp)
 
@@ -33,6 +49,7 @@ set(OATPP_MODULES_LOCATION CUSTOM)
 set(OATPP_DIR_SRC ${oatpp_SOURCE_DIR})
 set(OATPP_DIR_LIB ${oatpp_BINARY_DIR})
 FetchContent_MakeAvailable(oatpp-swagger)
+FetchContent_MakeAvailable(oatpp-websocket)
 
 get_target_property(OATPP_SWAGGER_SOURCE_DIR oatpp-swagger SOURCE_DIR)
 message("OATPP_SWAGGER_SOURCE_DIR=${OATPP_SWAGGER_SOURCE_DIR}")
@@ -52,4 +69,5 @@ target_link_libraries(${PROJECT_NAME}
         squirrel::squirrel_static
         squirrel::sqstdlib_static
         oatpp
-        oatpp-swagger)
+        oatpp-swagger
+        oatpp-websocket)
