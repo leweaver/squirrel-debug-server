@@ -51,3 +51,4 @@ Thumbs.db
 cmake-build-debug/
 .vs/
 *.user
+out/
