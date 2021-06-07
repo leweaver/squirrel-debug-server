@@ -11,13 +11,17 @@
 
 #include "../MessageInterface.h"
 
+#include <memory>
+#include <vector>
+
 namespace qdb {
 /**
  * WebSocket listener listens on incoming WebSocket events.
  */
 class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
  public:
-  RemoteConnection(std::shared_ptr<MessageCommandInterface> commandInterface) : commandInterface_(commandInterface) {}
+  RemoteConnection(const WebSocket& webSocket, std::shared_ptr<MessageCommandInterface> commandInterface)
+      : webSocket_(webSocket), commandInterface_(commandInterface) {}
 
   /**
    * Called on "ping" frame.
@@ -39,11 +43,14 @@ class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
    */
   void readMessage(const WebSocket& socket, v_uint8 opcode, p_char8 data, oatpp::v_io_size size) override;
 
- private:
+  void sendMessage(const oatpp::String& message);
 
+ private:
   void handleCommandMessage(const WebSocket& socket, const oatpp::String& message);
 
   static constexpr const char* TAG = "Server_WSListener";
+
+  const WebSocket& webSocket_;
 
   /**
    * Buffer for messages. Needed for multi-frame messages.
@@ -56,11 +63,8 @@ class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
  * Listener on new WebSocket connections.
  */
 class WSInstanceListener : public oatpp::websocket::ConnectionHandler::SocketInstanceListener {
- private:
-  static constexpr const char* TAG = "Server_WSInstanceListener";
-
  public:
-   explicit WSInstanceListener(std::shared_ptr<MessageCommandInterface> commandInterface)
+  WSInstanceListener(std::shared_ptr<MessageCommandInterface> commandInterface)
       : commandInterface_(commandInterface) {}
   /**
    * Counter for connected clients.
@@ -68,6 +72,7 @@ class WSInstanceListener : public oatpp::websocket::ConnectionHandler::SocketIns
   static std::atomic<v_int32> SOCKETS;
 
  public:
+  void broadcastMessage(const oatpp::String& message);
   /**
    *  Called when socket is created
    */
@@ -79,7 +84,9 @@ class WSInstanceListener : public oatpp::websocket::ConnectionHandler::SocketIns
   void onBeforeDestroy(const oatpp::websocket::WebSocket& socket) override;
 
  private:
+  static constexpr const char* TAG = "Server_WSInstanceListener";
   std::shared_ptr<MessageCommandInterface> commandInterface_;
+  std::vector<std::shared_ptr<RemoteConnection>> connections_;
 };
 }// namespace qdb
 #endif// SAMPLE_APP_WSLISTENER_HWSLISTENER_H

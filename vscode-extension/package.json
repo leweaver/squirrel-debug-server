@@ -1,0 +1,165 @@
+{
+  "name": "squirrel-debug",
+  "displayName": "Squirrel Debug",
+  "version": "0.45.8",
+  "publisher": "leweaver",
+  "description": "Extension for debugged squirrel in a host application, remotely in VS Code.",
+  "author": {
+    "name": "Lewis Weaver",
+    "email": "ransico@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "multi-root ready"
+  ],
+  "engines": {
+    "vscode": "^1.55.0"
+  },
+  "icon": "images/squirrel-debug-icon.png",
+  "categories": [
+    "Debuggers"
+  ],
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/vscode-mock-debug.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Microsoft/vscode-mock-debug/issues"
+  },
+  "scripts": {
+    "vscode:prepublish": "yarn run package-ext && yarn run package-web",
+    "compile": "tsc -p ./",
+    "lint": "eslint src --ext ts",
+    "watch": "webpack --watch --devtool nosources-source-map --info-verbosity verbose --config ./build/extension.webpack.config.js",
+    "watch2": "tsc -watch -p ./",
+    "pretest": "yarn run compile && yarn run lint",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "package-ext": "webpack --mode production --config ./build/extension.webpack.config.js",
+    "compile-web": "webpack --devtool nosources-source-map --config ./build/web-extension.webpack.config.js",
+    "watch-web": "webpack --watch --devtool nosources-source-map --info-verbosity verbose --config ./build/web-extension.webpack.config.js",
+    "package-web": "webpack --mode production --config ./build/web-extension.webpack.config.js"
+  },
+  "dependencies": {
+    "await-notify": "1.0.1",
+    "encodeurl": "^1.0.1",
+    "got": "^9.6.0",
+    "vscode-debugadapter": "^1.46.0",
+    "ws": "^7.4.6"
+  },
+  "devDependencies": {
+    "@types/encodeurl": "^1.0.0",
+    "@types/glob": "^7.1.3",
+    "@types/got": "^9.6.8",
+    "@types/mocha": "^8.2.2",
+    "@types/node": "^14.14.37",
+    "@types/vscode": "^1.55.0",
+    "@types/ws": "^7.4.4",
+    "@typescript-eslint/eslint-plugin": "^4.21.0",
+    "@typescript-eslint/parser": "^4.21.0",
+    "eslint": "^7.23.0",
+    "glob": "^7.1.6",
+    "mocha": "^8.3.2",
+    "ts-loader": "^8.1.0",
+    "typescript": "^4.2.3",
+    "vsce": "^1.88.0",
+    "vscode-debugadapter-testsupport": "^1.46.0",
+    "webpack": "^4.46.0",
+    "webpack-cli": "^3.3.12"
+  },
+  "main": "./dist/ext/extension.js",
+  "browser": "./dist/web/extension.js",
+  "activationEvents": [
+    "onDebugResolve:squirrel",
+    "onDebugDynamicConfigurations:squirrel",
+    "onCommand:extension.squirrel-debug.getProgramName",
+    "onCommand:extension.squirrel-debug.runEditorContents",
+    "onCommand:extension.squirrel-debug.debugEditorContents"
+  ],
+  "workspaceTrust": {
+    "request": "never"
+  },
+  "contributes": {
+    "menus": {
+      "debug/variables/context": [
+        {
+          "command": "extension.squirrel-debug.toggleFormatting",
+          "when": "debugType == 'squirrel' && debugProtocolVariableMenuContext == 'simple'"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "extension.squirrel-debug.toggleFormatting",
+        "title": "Toggle between decimal and hex formatting"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "squirrel"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "squirrel",
+        "languages": [
+          "squirrel"
+        ],
+        "label": "Squirrel Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "hostnamePort"
+            ],
+            "properties": {
+              "hostnamePort": {
+                "type": "string",
+                "description": "hostname:port of the host application",
+                "default": "${command:AskForHostnamePort}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch.",
+                "default": true
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Enable logging of the Debug Adapter Protocol.",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "squirrel",
+            "request": "launch",
+            "name": "Ask for hostname and port",
+            "hostnamePort": "${command:AskForHostnamePort}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Squirrel Remote Debug",
+            "description": "A new configuration for connection the debugger to a process running Squid",
+            "body": {
+              "type": "squirrel",
+              "request": "launch",
+              "name": "Ask for hostname and port",
+              "hostnamePort": "^\"\\${command:AskForProgramName}\"",
+              "stopOnEntry": true
+            }
+          }
+        ],
+        "variables": {
+          "AskForHostnamePort": "extension.squirrel-debug.getHostnamePort"
+        }
+      }
+    ]
+  }
+}

@@ -20,9 +20,10 @@ class Endpoint {
   static void InitEnvironment();
   static void ShutdownEnvironment();
 
-  static Endpoint* Create(std::shared_ptr<MessageCommandInterface> messageCommandInterface);
+  static Endpoint* Create();
 
   virtual std::shared_ptr<MessageEventInterface> GetEventInterface() const = 0;
+  virtual void SetCommandInterface(std::shared_ptr<MessageCommandInterface> messageCommandInterface) = 0;
   virtual void Start() = 0;
 
   // Stops the worker thread, optionally joining the thread until the stop has completed.

@@ -6,6 +6,7 @@
 #include "Logger.h"
 #include "MessageInterface.h"
 #include "SwaggerComponent.h"
+#include "dto/EventDto.h"
 
 #include "oatpp/core/macro/component.hpp"
 #include "oatpp/network/tcp/server/ConnectionProvider.hpp"
@@ -24,20 +25,27 @@
 #include "controller/TestAppController.h"
 #include "websocket/WSListener.h"
 
+using oatpp::parser::json::mapping::ObjectMapper;
+using oatpp::data::mapping::type::Void;
 
 namespace qdb {
 class TestAppComponent {
  public:
   explicit TestAppComponent(std::shared_ptr<MessageCommandInterface> commandInterface)
-    : websocketConnectionHandler(CreateWebSocketConnectionHandler(commandInterface)) {
+      : webSocketInstanceListener_(CreateWebSocketInstanceListener(commandInterface))
+      , webSocketConnectionHandler_(CreateWebSocketConnectionHandler(webSocketInstanceListener_)) {
   }
 
   static oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> 
-  CreateWebSocketConnectionHandler(std::shared_ptr<MessageCommandInterface> commandInterface) {
+  CreateWebSocketConnectionHandler(std::shared_ptr<WSInstanceListener> instanceListener) {
     auto connectionHandler = oatpp::websocket::ConnectionHandler::createShared();
-    connectionHandler->setSocketInstanceListener(std::make_shared<WSInstanceListener>(commandInterface));
+    connectionHandler->setSocketInstanceListener(instanceListener);
     return oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>(
             "websocket" /* qualifier */, connectionHandler);
+  }
+
+  static std::shared_ptr<WSInstanceListener> CreateWebSocketInstanceListener(std::shared_ptr<MessageCommandInterface> commandInterface) {
+    return std::make_shared<WSInstanceListener>(commandInterface);
   }
 
   /**
@@ -83,20 +91,39 @@ class TestAppComponent {
   /**
    *  Create websocket connection handler
    */
-  oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> websocketConnectionHandler;
+  std::shared_ptr<WSInstanceListener> webSocketInstanceListener_;
+  oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler_;
 };
 
 class OatMessageEventInterface : public MessageEventInterface {
  public:
-  void OnBreakpointHit() override {
+  OatMessageEventInterface(std::shared_ptr<WSInstanceListener> webSocketInstanceListener)
+      : webSocketInstanceListener_(webSocketInstanceListener) {}
+
+  void OnStatus(data::Status&& status) override {
+    const auto statusDto = dto::Status::createShared();
+    statusDto->runstate = static_cast<qdb::dto::RunState>(status.runstate);
+    statusDto->stack = oatpp::List<oatpp::Object<dto::StackEntry>>::createShared();
+    for (const auto& stackEntry : status.stack) {
+      const auto stackEntryDto = dto::StackEntry::createShared();
+      stackEntryDto->file = stackEntry.file.c_str();
+      stackEntryDto->line = stackEntry.line;
+      stackEntryDto->function = stackEntry.function.c_str();
+      statusDto->stack->push_back(stackEntryDto);
+    }
+
+    webSocketInstanceListener_->broadcastMessage(mapper_->writeToString(statusDto));
   }
+
+ private:
+  std::shared_ptr<ObjectMapper> mapper_ = ObjectMapper::createShared();
+  std::shared_ptr<WSInstanceListener> webSocketInstanceListener_;
 };
 
 class EndpointImpl : public Endpoint {
 
  public:
-  EndpointImpl(std::shared_ptr<MessageCommandInterface> messageCommandInterface) {
-    eventInterface_ = std::make_shared<OatMessageEventInterface>();
+  void SetCommandInterface(std::shared_ptr<MessageCommandInterface> messageCommandInterface) override {
 
     /* create ApiControllers and add endpoints to router */
     appComponents_ = std::make_shared<TestAppComponent>(messageCommandInterface);
@@ -111,6 +138,8 @@ class EndpointImpl : public Endpoint {
 
     swaggerController_ = oatpp::swagger::Controller::createShared(docEndpoints);
     swaggerController_->addEndpointsToRouter(router);
+
+    eventInterface_ = std::make_shared<OatMessageEventInterface>(appComponents_->webSocketInstanceListener_);
   }
 
   std::shared_ptr<MessageEventInterface> GetEventInterface() const override {
@@ -155,8 +184,8 @@ class EndpointImpl : public Endpoint {
   static constexpr const char* TAG = "Server_Endpoint";
 };
 
-Endpoint* Endpoint::Create(std::shared_ptr<MessageCommandInterface> messageCommandInterface) {
-  return new EndpointImpl(messageCommandInterface);
+Endpoint* Endpoint::Create() {
+  return new EndpointImpl();
 }
 
 void Endpoint::InitEnvironment() {

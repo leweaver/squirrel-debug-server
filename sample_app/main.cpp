@@ -100,6 +100,8 @@ void run(std::shared_ptr<QuirrelDebugger> debugger) {
 
   // Enable debugging hooks
   if (debugger) {
+    debugger->SetVm(v);
+    debugger->Pause();
     sq_enabledebuginfo(v, SQTrue);
     sq_setnativedebughook(v, &SquirrelNativeDebugHook);
   }
@@ -116,6 +118,7 @@ void run(std::shared_ptr<QuirrelDebugger> debugger) {
   sq_setcompilererrorhandler(v, SquirrelOnCompileError);
   if (SQ_SUCCEEDED(CompileFile(v, filename))) {
     sq_pushroottable(v);
+
     if (SQ_FAILED(sq_call(v, 1 /* root table */, SQFalse, SQTrue))) {
       cerr << "Failed to call global method" << endl;
     }
@@ -138,12 +141,14 @@ int main(int argc, char* argv[]) {
   
   Endpoint::InitEnvironment();
 
+  std::unique_ptr<Endpoint> ep(Endpoint::Create());
   auto debugger = std::make_shared<QuirrelDebugger>();
-  debugger->Pause();
 
-  std::unique_ptr<Endpoint> ep(Endpoint::Create(debugger));
+  ep->SetCommandInterface(debugger);
+  debugger->SetEventInterface(ep->GetEventInterface());
 
   ep->Start();
+
   run(debugger);
 
   ep->Stop(true);

@@ -20,7 +20,9 @@ add_executable(sample_app
     "debug-server/Logger.h"
     "debug-server/Logger.cpp"
     "debug-server/MessageInterface.h"
-    "debugger/QuirrelDebugger.h" "debugger/QuirrelDebugger.cpp")
+    "debug-server/dto/EventDto.h"
+    "debugger/QuirrelDebugger.h" 
+    "debugger/QuirrelDebugger.cpp")
 
 ################################
 # Dependencies

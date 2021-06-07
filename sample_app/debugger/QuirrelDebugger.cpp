@@ -15,6 +15,12 @@
 #include <unordered_map>
 #include <mutex>
 
+using qdb::data::Runstate;
+using qdb::data::StackEntry;
+using qdb::data::Status;
+
+using LockGuard = std::lock_guard<std::recursive_mutex>;
+
 const long long kMaxTablePrettyPrintSize = 5LL;
 const long long pooaxTablePrettyPrintSize = 5LL;
 const long long ARC_BOAT = 5LL;
@@ -258,16 +264,46 @@ std::string GetClassFullName(HSQUIRRELVM v) {
   throw std::runtime_error("Unknown class");
 }
 
+void QuirrelDebugger::SetEventInterface(std::shared_ptr<qdb::MessageEventInterface> eventInterface) {
+  eventInterface_ = eventInterface;
+}
+
+void QuirrelDebugger::SetVm(HSQUIRRELVM vm) {
+  vm_ = vm;
+}
+
 void QuirrelDebugger::Pause() {
-  paused_ = true;
+  //LockGuard lock(vmMutex_);
+  pauseRequested_ = true;
 }
 
 void QuirrelDebugger::Play() {
-  if (paused_) {
-    auto lock = std::unique_lock<std::mutex>(pauseMutex_);
-    paused_ = false;
+  if (pauseRequested_) {
+    std::lock_guard<std::mutex> lock(pauseMutex_);
+    pauseRequested_ = false;
     pauseCv_.notify_all();
   }
+}
+
+void QuirrelDebugger::SendStatus() {
+  // Don't allow unpause while we read the status.
+  Status status;
+  {
+    std::lock_guard<std::mutex> lock(pauseMutex_);
+    if (pauseRequested_) {
+      if (isPaused_) {
+        // Make a copy of the last known status.
+        status = status_;
+        status.runstate = Runstate::Paused;
+      } else {
+        status.runstate = Runstate::Pausing;
+      }
+    } else {
+      status.runstate = Runstate::Running;
+    }
+  }
+
+  eventInterface_->OnStatus(std::move(status));
 }
 
 void QuirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {
@@ -301,12 +337,33 @@ void QuirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, con
       sq_poptop(v);
     }
   } else if (type == 'l') {
-    if (paused_) {
-      auto lock = std::unique_lock<std::mutex>(pauseMutex_);
-      pauseCv_.wait(lock);
+    // Wait for pauseRequested_ to become false
+    if (pauseRequested_) {
+      std::unique_lock<std::mutex> lock(pauseMutex_);
+      while (pauseRequested_) {
+        isPaused_ = true;
 
-      // paused_ will now be false
-      return;
+        status_.runstate = Runstate::Paused;
+        status_.stack.clear();
+
+        SQStackInfos si;
+        auto stackIdx = 0;
+        while (SQ_SUCCEEDED(sq_stackinfos(vm_, stackIdx, &si))) {
+          status_.stack.push_back({std::string(si.source), si.line, std::string(si.funcname)});
+          ++stackIdx;
+        }
+
+        {
+          Status status = status_;
+          eventInterface_->OnStatus(std::move(status));
+        }
+
+        // This Cv will be signaled whenever the value of pauseRequested_ changes.
+        pauseCv_.wait(lock);
+        isPaused_ = false;
+      }
     }
+    
+    return;
   }
 }
