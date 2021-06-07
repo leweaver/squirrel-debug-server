@@ -10,7 +10,6 @@ import { SquidDebugSession } from './squidDebug';
 import { FileAccessor } from './squidRuntime';
 
 export function activateSquidDebug(context: vscode.ExtensionContext, factory?: vscode.DebugAdapterDescriptorFactory) {
-
 	context.subscriptions.push(
 		vscode.commands.registerCommand('extension.squirrel-debug.runEditorContents', (resource: vscode.Uri) => {
 			let targetResource = resource;

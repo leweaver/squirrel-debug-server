@@ -13,6 +13,7 @@ import { platform } from 'process';
 import { ProviderResult } from 'vscode';
 import { SquidDebugSession } from './squidDebug';
 import { activateSquidDebug, workspaceFileAccessor } from './activateSquidDebug';
+import { logger } from 'vscode-debugadapter';
 
 /*
  * The compile time flag 'runMode' controls how the debug adapter is run.
@@ -21,6 +22,13 @@ import { activateSquidDebug, workspaceFileAccessor } from './activateSquidDebug'
 const runMode: 'external' | 'server' | 'namedPipeServer' | 'inline' = 'inline';
 
 export function activate(context: vscode.ExtensionContext) {
+
+	let channel = vscode.window.createOutputChannel("Squid");
+	context.subscriptions.push(channel);
+	channel.appendLine("Extension activating.");
+	logger.init((e) => {
+		channel.append("[" + e.body.category + "] " + e.body.output);
+	});
 
 	// debug adapters can be run in different ways by using a vscode.DebugAdapterDescriptorFactory:
 	switch (runMode) {

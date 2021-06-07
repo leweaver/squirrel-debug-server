@@ -51,7 +51,6 @@ args.forEach(function (val, index, array) {
 });
 
 if (port > 0) {
-
 	// start a server that creates a new session for every connection request
 	console.error(`waiting for debug protocol on port ${port}`);
 	Net.createServer((socket) => {
