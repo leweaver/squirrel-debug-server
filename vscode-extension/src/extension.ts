@@ -35,12 +35,12 @@ export function activate(context: vscode.ExtensionContext) {
                 category = "Warn";
                 break;
             default:
-                category = "Log"
+                category = "Log";
                 break;
         }
 
         channel.append(`[${category}] ${e.body.output}`);
-        if (e.body.output.length > 0 && e.body.output[e.body.output.length-1] != '\n') {
+        if (e.body.output.length > 0 && e.body.output[e.body.output.length-1] !== '\n') {
             channel.append('\n');
         }
     });

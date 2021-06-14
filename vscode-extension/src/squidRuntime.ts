@@ -4,6 +4,7 @@
 
 import { logger} from 'vscode-debugadapter';
 import { EventEmitter } from 'events';
+import { EventMessage, EventMessageType, Status, Runstate } from './squidDto';
 
 //import encodeUrl = require('encodeurl');
 //import got = require('got');
@@ -66,6 +67,8 @@ export class SquidRuntime extends EventEmitter {
 
     private _debuggerHostnamePort = "localhost:8000";
 
+    private _status?: Status = undefined;
+
 
     constructor(private _fileAccessor: FileAccessor) {
         super();
@@ -114,14 +117,30 @@ export class SquidRuntime extends EventEmitter {
      * Returns a fake 'stacktrace' where every 'stackframe' is a word from the current line.
      */
     public stack(startFrame: number, endFrame: number): IStack {
-        return {
-            frames: [{
+        let frames: IStackFrame[];
+        if (this._status !== undefined && this._status?.runstate === Runstate.paused) {
+            frames = [];
+            let statusStack = this._status?.stack;
+            for (let i = 0; i < statusStack.length; i++) {
+                let statusStackEntry = statusStack[i];
+                frames.push({
+                    index: i,
+                    name: statusStackEntry.function,
+                    file: statusStackEntry.file,
+                    line: statusStackEntry.line
+                });
+            }
+        } else {
+            frames = [{
                 index: 0,
                 name: `helloWorld()`,
                 file: "hello world",
                 line: 1
-            }],
-            count: 1
+            }];
+        }
+        return {
+            frames: frames,
+            count: frames.length
         };
     }
 
@@ -212,14 +231,14 @@ export class SquidRuntime extends EventEmitter {
     private async connectDebugger(hostnamePort: string): Promise<void> {
         
         logger.log('connectDebugger');
-        var wsMessageHandler = this.onWsMessage;
+        let self = this;
         return new Promise<void>((resolve, reject) => {
             const ws = new WebSocket(`ws://${hostnamePort}/ws`);
             ws.on('open', function open() {
                 ws.send("send_status");
                 resolve();
             });
-            ws.on('message', wsMessageHandler);
+            ws.on('message', (msgStr: string) => self.handleWebsocketMessage(msgStr));
             ws.on('error', (evt: WebSocket.ErrorEvent) => {
                 logger.error(evt.message);
                 reject("Failed to connect: " + evt.message);
@@ -227,14 +246,54 @@ export class SquidRuntime extends EventEmitter {
         });
     }
 
-    private onWsMessage(msg: string): void {
-        logger.log("Received: " + msg);
+    private handleWebsocketMessage(msgStr: string): Promise<void> {
+        let message: EventMessage;
+        try {
+            message = new EventMessage(JSON.parse(msgStr));
+        } catch (e) {
+            logger.error('Failed to parse JSON: ' + msgStr);
+            return Promise.reject('Failed to parse JSON');
+        }
+
+        if (message.message === undefined) {
+            logger.error('Invalid message body: ' + msgStr);
+            return Promise.reject('Invalid message body');
+        }
+        
+        try {
+            switch (message.type) {
+                case EventMessageType.status:
+                    this.updateStatus(new Status(message.message));
+                    break;
+                default:
+                    logger.log("Unabled to handle message: " + message.type);
+                    return Promise.reject();
+            }
+        } catch (e) {
+            logger.error('Failed to handle message: ' + msgStr + " (" + e.message + ")");
+            return Promise.reject('Failed to handle message');
+        }
+
+        logger.log("Handled message: " + message.type);
+        return Promise.resolve();
+    }
+
+    private updateStatus(status: Status) {
+        this._status = status;
+        
+        if (status.runstate === Runstate.paused) {
+            logger.log('Stopping');
+            this.sendEvent('stopOnStep');
+        } else {
+            logger.log('Playing');
+            this.sendEvent('continued');
+        }
     }
 
     private async loadSource(file: string): Promise<string[]> {
         let sourceLines = this._sourceLines[file];
 
-        if (typeof(sourceLines) == "undefined") {
+        if (typeof(sourceLines) === "undefined") {
             const contents = await this._fileAccessor.readFile(file);
             this._sourceLines[file] = contents.split(/\r?\n/);
         }

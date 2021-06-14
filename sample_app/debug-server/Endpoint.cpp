@@ -112,7 +112,11 @@ class OatMessageEventInterface : public MessageEventInterface {
       statusDto->stack->push_back(stackEntryDto);
     }
 
-    webSocketInstanceListener_->broadcastMessage(mapper_->writeToString(statusDto));
+    const auto wrapper = dto::MessageWrapper<dto::Status>::createShared();
+    wrapper->type = dto::EventMessageType::Status;
+    wrapper->message = statusDto;
+
+    webSocketInstanceListener_->broadcastMessage(mapper_->writeToString(wrapper));
   }
 
  private:

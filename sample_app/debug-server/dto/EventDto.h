@@ -12,11 +12,21 @@
 #include OATPP_CODEGEN_BEGIN(DTO) ///< Begin DTO codegen section
 
 namespace qdb::dto {
+ENUM(EventMessageType, v_int32,
+     VALUE(Status, 0, "status"))
+
+template <typename TMessageBody>
+class MessageWrapper : public oatpp::DTO {
+  DTO_INIT(MessageWrapper, DTO)
+
+  DTO_FIELD(Enum<EventMessageType>, type);
+  DTO_FIELD(Object<TMessageBody>, message);
+};
 
 ENUM(RunState, v_int32,
-    VALUE(Running, 0),
-    VALUE(Pausing, 1),
-    VALUE(Paused, 2)
+    VALUE(Running, 0, "running"),
+    VALUE(Pausing, 1, "pausing"),
+    VALUE(Paused, 2, "paused")
 )
 
 class StackEntry : public oatpp::DTO {

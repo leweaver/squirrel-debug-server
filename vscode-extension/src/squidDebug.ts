@@ -7,7 +7,7 @@ import {
     DebugSession,
     InitializedEvent, TerminatedEvent, StoppedEvent, BreakpointEvent, OutputEvent,
     ProgressStartEvent, ProgressUpdateEvent, ProgressEndEvent, InvalidatedEvent,
-    Thread, StackFrame, Scope, Source, Handles, Breakpoint
+    Thread, StackFrame, Scope, Source, Handles, Breakpoint, ContinuedEvent
 } from 'vscode-debugadapter';
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { basename } from 'path';
@@ -89,6 +89,9 @@ export class SquidDebugSession extends DebugSession {
             } else {
                 this.sendEvent(new StoppedEvent('exception', SquidDebugSession.threadID));
             }
+        });
+        this._runtime.on('continued', () => {
+            this.sendEvent(new ContinuedEvent(SquidDebugSession.threadID));
         });
         this._runtime.on('breakpointValidated', (bp: ISquidBreakpoint) => {
             this.sendEvent(new BreakpointEvent('changed', { verified: bp.verified, id: bp.id } as DebugProtocol.Breakpoint));
