@@ -11,18 +11,19 @@ set(CMAKE_CXX_STANDARD 17)
 # Executable
 add_executable(sample_app
     "main.cpp"
-    "debug-server/Endpoint.cpp"
-    "debug-server/Endpoint.h"
-    "debug-server/SwaggerComponent.h"
+    "../embedded_server/Endpoint.cpp"
+    "../embedded_server/Endpoint.h"
+    "../embedded_server/SwaggerComponent.h"
     "debug-server/controller/TestAppController.h"
     "debug-server/websocket/WSListener.cpp"
     "debug-server/websocket/WSListener.h"
-    "debug-server/Logger.h"
-    "debug-server/Logger.cpp"
-    "debug-server/MessageInterface.h"
+    "../embedded_server/Logger.h"
+    "../embedded_server/Logger.cpp"
     "debug-server/dto/EventDto.h"
     "debugger/QuirrelDebugger.h" 
-    "debugger/QuirrelDebugger.cpp")
+    "debugger/QuirrelDebugger.cpp"
+    "../embedded_server/AppComponents.h"
+    "../embedded_server/AppComponents.cpp")
 
 ################################
 # Dependencies
@@ -68,6 +69,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(quirrel)
 
 target_link_libraries(${PROJECT_NAME}
+        qdb::interfaces
         squirrel::squirrel_static
         squirrel::sqstdlib_static
         oatpp

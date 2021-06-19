@@ -14,14 +14,17 @@
 #include <memory>
 #include <vector>
 
+namespace oatpp::parser::json::mapping {
+class ObjectMapper;
+}
+
 namespace qdb {
 /**
  * WebSocket listener listens on incoming WebSocket events.
  */
 class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
  public:
-  RemoteConnection(const WebSocket& webSocket, std::shared_ptr<MessageCommandInterface> commandInterface)
-      : webSocket_(webSocket), commandInterface_(commandInterface) {}
+  RemoteConnection(const WebSocket& webSocket, std::shared_ptr<MessageCommandInterface> commandInterface);
 
   /**
    * Called on "ping" frame.
@@ -57,6 +60,7 @@ class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
    */
   oatpp::data::stream::ChunkedBuffer messageBuffer_;
   std::shared_ptr<MessageCommandInterface> commandInterface_;
+  std::shared_ptr<ObjectMapper> mapper_;
 };
 
 /**

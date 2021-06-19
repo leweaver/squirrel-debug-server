@@ -3,8 +3,8 @@
 //
 #pragma once
 
-#ifndef SAMPLE_APP_MESSAGE_INTERFACE_H
-#define SAMPLE_APP_MESSAGE_INTERFACE_H
+#ifndef QDB_MESSAGE_INTERFACE_H
+#define QDB_MESSAGE_INTERFACE_H
 
 #include <vector>
 #include <string>

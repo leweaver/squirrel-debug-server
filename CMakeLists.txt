@@ -7,6 +7,5 @@ project(vscode_quirrel_debugger)
 
 set(CMAKE_CXX_STANDARD 17)
 
-################################
-# Executable
+add_subdirectory(interfaces)
 add_subdirectory(sample_app)

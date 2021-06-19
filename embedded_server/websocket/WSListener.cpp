@@ -7,6 +7,9 @@ using namespace qdb;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // RemoteConnection
 
+RemoteConnection::RemoteConnection(const WebSocket& webSocket, std::shared_ptr<MessageCommandInterface> commandInterface)
+    : webSocket_(webSocket), commandInterface_(commandInterface) {}
+
 void RemoteConnection::onPing(const WebSocket& socket, const oatpp::String& message) {
   OATPP_LOGD(TAG, "onPing");
   socket.sendPong(message);
@@ -42,6 +45,8 @@ void RemoteConnection::sendMessage(const oatpp::String& message) {
 void RemoteConnection::handleCommandMessage(const WebSocket& socket, const oatpp::String& message) {
   OATPP_LOGD(TAG, "handleCommandMessage message='%s'", message->c_str());
 
+
+
   if (message == "pause") {
     commandInterface_->Pause();
   } else if (message == "continue") {
@@ -58,9 +63,6 @@ void RemoteConnection::handleCommandMessage(const WebSocket& socket, const oatpp
     socket.sendOneFrameText("err: unknown command " + message);
     return;
   }
-
-  /* Send message in reply */
-  socket.sendOneFrameText("ack: " + message);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

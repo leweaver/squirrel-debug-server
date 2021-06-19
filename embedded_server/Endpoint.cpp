@@ -29,71 +29,6 @@ using oatpp::parser::json::mapping::ObjectMapper;
 using oatpp::data::mapping::type::Void;
 
 namespace qdb {
-class TestAppComponent {
- public:
-  explicit TestAppComponent(std::shared_ptr<MessageCommandInterface> commandInterface)
-      : webSocketInstanceListener_(CreateWebSocketInstanceListener(commandInterface))
-      , webSocketConnectionHandler_(CreateWebSocketConnectionHandler(webSocketInstanceListener_)) {
-  }
-
-  static oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> 
-  CreateWebSocketConnectionHandler(std::shared_ptr<WSInstanceListener> instanceListener) {
-    auto connectionHandler = oatpp::websocket::ConnectionHandler::createShared();
-    connectionHandler->setSocketInstanceListener(instanceListener);
-    return oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>(
-            "websocket" /* qualifier */, connectionHandler);
-  }
-
-  static std::shared_ptr<WSInstanceListener> CreateWebSocketInstanceListener(std::shared_ptr<MessageCommandInterface> commandInterface) {
-    return std::make_shared<WSInstanceListener>(commandInterface);
-  }
-
-  /**
-   *  Swagger component
-   */
-  SwaggerComponent swaggerComponent;
-
-  /**
-   *  Create ConnectionProvider component which listens on the port
-   */
-  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, serverConnectionProvider)
-  ([] {
-    return oatpp::network::tcp::server::ConnectionProvider::createShared({"localhost", 8000, oatpp::network::Address::IP_4});
-  }());
-
-  /**
-   *  Create Router component
-   */
-  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, httpRouter)
-  ([] {
-    return oatpp::web::server::HttpRouter::createShared();
-  }());
-
-  /**
-   *  Create http ConnectionHandler
-   */
-  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, httpConnectionHandler)
-  ("http" /* qualifier */, [] {
-    OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, router);// get Router component
-    return oatpp::web::server::HttpConnectionHandler::createShared(router);
-  }());
-
-  /**
-   * Create ObjectMapper component to serialize/deserialize DTOs in Contoller's API
-   */
-  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::data::mapping::ObjectMapper>, apiObjectMapper)
-  ([] {
-    auto objectMapper = oatpp::parser::json::mapping::ObjectMapper::createShared();
-    objectMapper->getDeserializer()->getConfig()->allowUnknownFields = false;
-    return objectMapper;
-  }());
-
-  /**
-   *  Create websocket connection handler
-   */
-  std::shared_ptr<WSInstanceListener> webSocketInstanceListener_;
-  oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler_;
-};
 
 class OatMessageEventInterface : public MessageEventInterface {
  public:
@@ -112,7 +47,7 @@ class OatMessageEventInterface : public MessageEventInterface {
       statusDto->stack->push_back(stackEntryDto);
     }
 
-    const auto wrapper = dto::MessageWrapper<dto::Status>::createShared();
+    const auto wrapper = dto::EventMessageWrapper<dto::Status>::createShared();
     wrapper->type = dto::EventMessageType::Status;
     wrapper->message = statusDto;
 
