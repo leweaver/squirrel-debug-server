@@ -11,19 +11,6 @@ set(CMAKE_CXX_STANDARD 17)
 # Executable
 add_executable(sample_app
     "main.cpp"
-    "../embedded_server/Endpoint.cpp"
-    "../embedded_server/Endpoint.h"
-    "../embedded_server/SwaggerComponent.h"
-    "debug-server/controller/TestAppController.h"
-    "debug-server/websocket/WSListener.cpp"
-    "debug-server/websocket/WSListener.h"
-    "../embedded_server/Logger.h"
-    "../embedded_server/Logger.cpp"
-    "debug-server/dto/EventDto.h"
-    "debugger/QuirrelDebugger.h" 
-    "debugger/QuirrelDebugger.cpp"
-    "../embedded_server/AppComponents.h"
-    "../embedded_server/AppComponents.cpp")
 
 ################################
 # Dependencies
