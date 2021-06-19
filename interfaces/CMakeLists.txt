@@ -5,8 +5,8 @@ project(interfaces)
 set(CMAKE_CXX_STANDARD 17)
 
 add_library(${PROJECT_NAME} INTERFACE
-    "include/qdb/MessageInterface.h")
-add_library(qdb::interfaces ALIAS interfaces)
+    "include/sdb/MessageInterface.h")
+add_library(sdb::interfaces ALIAS interfaces)
 
 target_include_directories(${PROJECT_NAME}
         INTERFACE

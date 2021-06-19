@@ -5,8 +5,8 @@ project(embedded_server)
 set(CMAKE_CXX_STANDARD 17)
 
 add_library(${PROJECT_NAME} PUBLIC
-    "Endpoint.cpp"
-    "Endpoint.h"
+    "include/sdb/EmbeddedServer.h"
+    "EmbeddedServer.cpp"
     "SwaggerComponent.h"
     "Logger.h"
     "Logger.cpp"
@@ -18,7 +18,7 @@ add_library(${PROJECT_NAME} PUBLIC
     "websocket/WSListener.cpp"
 )
 
-add_library(qdb::embedded_server ALIAS embedded_server)
+add_library(sdb::embedded_server ALIAS embedded_server)
 
 target_include_directories(${PROJECT_NAME}
         INTERFACE
