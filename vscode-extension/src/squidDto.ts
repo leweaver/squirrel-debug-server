@@ -18,7 +18,8 @@ export class EventMessage {
 export enum Runstate {
     running = 0,
     pausing = 1,
-    paused = 2
+    paused = 2,
+    stepping = 3
 }
 
 export class StackEntry {

@@ -44,8 +44,14 @@ void RemoteConnection::handleCommandMessage(const WebSocket& socket, const oatpp
 
   if (message == "pause") {
     commandInterface_->Pause();
-  } else if (message == "play") {
-    commandInterface_->Play();
+  } else if (message == "continue") {
+    commandInterface_->Continue();
+  } else if (message == "step_out") {
+    commandInterface_->StepOut();
+  } else if (message == "step_over") {
+    commandInterface_->StepOver();
+  } else if (message == "step_in") {
+    commandInterface_->StepIn();
   } else if (message == "send_status") {
     commandInterface_->SendStatus();
   } else {

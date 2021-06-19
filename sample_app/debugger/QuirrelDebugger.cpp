@@ -14,6 +14,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <mutex>
+#include <cassert>
 
 using qdb::data::Runstate;
 using qdb::data::StackEntry;
@@ -25,6 +26,9 @@ const long long kMaxTablePrettyPrintSize = 5LL;
 const long long pooaxTablePrettyPrintSize = 5LL;
 const long long ARC_BOAT = 5LL;
 const long long ARC_BOAT2 = 5LL;
+
+// Kinda just chosen arbitrarily - but if this isn't big enough, you should seriously consider changing your algorithm!
+const long long kMaxStackDepth = 100;
 
 const char* GetSqObjTypeName(SQObjectType sqType) {
   static const std::array<const char*, 18> typeNames = {
@@ -269,20 +273,48 @@ void QuirrelDebugger::SetEventInterface(std::shared_ptr<qdb::MessageEventInterfa
 }
 
 void QuirrelDebugger::SetVm(HSQUIRRELVM vm) {
-  vm_ = vm;
+   vmData_.vm = vm;
 }
 
 void QuirrelDebugger::Pause() {
-  //LockGuard lock(vmMutex_);
-  pauseRequested_ = true;
+  if (pauseRequested_ == PauseType::None) {
+    std::lock_guard<std::mutex> lock(pauseMutex_);
+    if (pauseRequested_ == PauseType::None) {
+      pauseRequested_ = PauseType::Pause;
+      pauseMutexData_.returnsRequired = -1;
+    }
+  }
 }
 
-void QuirrelDebugger::Play() {
-  if (pauseRequested_) {
+void QuirrelDebugger::Continue() {
+  if (pauseRequested_ != PauseType::None) {
     std::lock_guard<std::mutex> lock(pauseMutex_);
-    pauseRequested_ = false;
+    pauseRequested_ = PauseType::None;
     pauseCv_.notify_all();
   }
+}
+
+void QuirrelDebugger::StepOut() {
+  Step(PauseType::StepOut, 1);
+}
+
+void QuirrelDebugger::StepOver() {
+  Step(PauseType::StepOver, 0);
+}
+  
+void QuirrelDebugger::StepIn() {
+  Step(PauseType::StepIn, -1);
+}
+
+void QuirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
+  std::lock_guard<std::mutex> lock(pauseMutex_);
+  if (!pauseMutexData_.isPaused) {
+    return;
+  }
+
+  pauseMutexData_.returnsRequired = returnsRequired;
+  pauseRequested_ = pauseType;
+  pauseCv_.notify_all();
 }
 
 void QuirrelDebugger::SendStatus() {
@@ -290,13 +322,15 @@ void QuirrelDebugger::SendStatus() {
   Status status;
   {
     std::lock_guard<std::mutex> lock(pauseMutex_);
-    if (pauseRequested_) {
-      if (isPaused_) {
+    if (pauseRequested_ != PauseType::None) {
+      if (pauseMutexData_.isPaused) {
         // Make a copy of the last known status.
-        status = status_;
+        status = pauseMutexData_.status;
         status.runstate = Runstate::Paused;
-      } else {
+      } else if (pauseRequested_ == PauseType::Pause) {
         status.runstate = Runstate::Pausing;
+      } else {
+        status.runstate = Runstate::Stepping;
       }
     } else {
       status.runstate = Runstate::Running;
@@ -307,16 +341,68 @@ void QuirrelDebugger::SendStatus() {
 }
 
 void QuirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {
-
-  // type:
   // 'c' called when a function has been called
-  // 'l' called every line(that contains some code)
+  if (type == 'c') {
+    ++vmData_.currentStackDepth;
+    assert(vmData_.currentStackDepth < kMaxStackDepth);
+    if (pauseRequested_ != PauseType::None) {
+      std::unique_lock<std::mutex> lock(pauseMutex_);
+      if (pauseRequested_ != PauseType::None) {
+        if (pauseMutexData_.returnsRequired >= 0) {
+          ++pauseMutexData_.returnsRequired;
+        }
+      }
+    }
   // 'r' called when a function returns
-  //
-  //cout << static_cast<char>(type) << ": " << sourcename << " (" << line << ")"
-  //     << " :: " << funcname << endl;
+  } else if (type == 'r') {
+    --vmData_.currentStackDepth;
+    assert(vmData_.currentStackDepth >= 0);
+    if (pauseRequested_ != PauseType::None) {
+      std::unique_lock<std::mutex> lock(pauseMutex_);
+      if (pauseRequested_ != PauseType::None) {
+        --pauseMutexData_.returnsRequired;
+      }
+    }
+  // 'l' called every line(that contains some code)
+  } else if (type == 'l') {
+    if (pauseRequested_ != PauseType::None && pauseMutexData_.returnsRequired <= 0) {
+      std::unique_lock<std::mutex> lock(pauseMutex_);
+      if (pauseRequested_ != PauseType::None && pauseMutexData_.returnsRequired <= 0) {
+        pauseMutexData_.isPaused = true;
 
-  if (type == 'r') {
+        auto& status = pauseMutexData_.status;
+        status.runstate = Runstate::Paused;
+
+        vmData_.PopulateStack(status.stack);
+
+        {
+          Status statusCopy = status;
+          eventInterface_->OnStatus(std::move(statusCopy));
+        }
+
+        // This Cv will be signaled whenever the value of pauseRequested_ changes.
+        pauseCv_.wait(lock);
+        pauseMutexData_.isPaused = false;
+      }
+    }
+    
+    return;
+  }
+}
+
+void QuirrelDebugger::SquirrelVmData::PopulateStack(std::vector<qdb::data::StackEntry>& stack) const {
+  stack.clear();
+
+  SQStackInfos si;
+  auto stackIdx = 0;
+  while (SQ_SUCCEEDED(sq_stackinfos(vm, stackIdx, &si))) {
+    stack.push_back({std::string(si.source), si.line, std::string(si.funcname)});
+    ++stackIdx;
+  }
+}
+
+void QuirrelDebugger::SquirrelVmData::PopulateStackVariables(std::vector<qdb::data::StackEntry>& stack) const {
+  /*
     SQStackInfos si;
     auto stackIdx = 0;
     while (SQ_SUCCEEDED(sq_stackinfos(v, stackIdx, &si))) {
@@ -336,34 +422,5 @@ void QuirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, con
       // Remove local from stack
       sq_poptop(v);
     }
-  } else if (type == 'l') {
-    // Wait for pauseRequested_ to become false
-    if (pauseRequested_) {
-      std::unique_lock<std::mutex> lock(pauseMutex_);
-      while (pauseRequested_) {
-        isPaused_ = true;
-
-        status_.runstate = Runstate::Paused;
-        status_.stack.clear();
-
-        SQStackInfos si;
-        auto stackIdx = 0;
-        while (SQ_SUCCEEDED(sq_stackinfos(vm_, stackIdx, &si))) {
-          status_.stack.push_back({std::string(si.source), si.line, std::string(si.funcname)});
-          ++stackIdx;
-        }
-
-        {
-          Status status = status_;
-          eventInterface_->OnStatus(std::move(status));
-        }
-
-        // This Cv will be signaled whenever the value of pauseRequested_ changes.
-        pauseCv_.wait(lock);
-        isPaused_ = false;
-      }
-    }
-    
-    return;
-  }
+    */
 }

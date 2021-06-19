@@ -20,8 +20,7 @@ For instructions on using the latter with CLion, see their [setup guide](https:/
 
 (tl;dr, add a new MinGW toolchain with Environment: `C:\Program Files\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64`)
 
-# VS-Code Mock
-
+# VS-Code Extension
 
 ## Pre-requisites
 Is a package manager for windows. Install: https://chocolatey.org/ and install the following things
@@ -30,13 +29,16 @@ in an administrative powershell:
 NodeJS LTS: `choco install nodejs-lts`
 Yarn: `choco install yarn`
 
-## Clone and install
+
+## Building
 More Details: https://code.visualstudio.com/api/extension-guides/debugger-extension#the-mock-debug-extension
 
-In a new place, clone the VSCode Mock and build with yarn:
-
 ```
-cd C:\repos\vscode-mock-debug
-git clone https://github.com/microsoft/vscode-mock-debug.git
 yarn
+```
+
+## Run Unit Tests
+```
+cd vscode-extension
+yarn test
 ```

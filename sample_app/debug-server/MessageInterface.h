@@ -15,7 +15,8 @@ namespace data {
 enum class Runstate {
   Running = 0,
   Pausing = 1,
-  Paused = 2
+  Paused = 2,
+  Stepping = 3
 };
 struct StackEntry {
   std::string file;
@@ -42,7 +43,22 @@ class MessageCommandInterface {
   /// <summary>
   /// Instructs the program to resume execution if it was previously paused
   /// </summary>
-  virtual void Play() = 0;
+  virtual void Continue() = 0;
+
+  /// <summary>
+  /// Instructs the program to execute until it pops 1 level up the stack if it was previously paused
+  /// </summary>
+  virtual void StepOut() = 0;
+
+  /// <summary>
+  /// Instructs the program to execute until it reaches another line at this stack level
+  /// </summary>
+  virtual void StepOver() = 0;
+
+  /// <summary>
+  /// Instructs the program to execute a single step if it was previously paused
+  /// </summary>
+  virtual void StepIn() = 0;
 
   /// <summary>
   /// Instructs the program to send out current state: ie playing or paused.

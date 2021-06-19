@@ -447,7 +447,7 @@ export class SquidDebugSession extends DebugSession {
     }
 
     protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
-        this._runtime.step();
+        this._runtime.stepOver();
         this.sendResponse(response);
     }
 
@@ -465,16 +465,12 @@ export class SquidDebugSession extends DebugSession {
     }
 
     protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments): void {
-        
-        // TODO:
-        //this._runtime.stepIn(args.targetId);
+        this._runtime.stepIn();
         this.sendResponse(response);
     }
 
     protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments): void {
-        
-        // TODO:
-        //this._runtime.stepOut();
+        this._runtime.stepOut();
         this.sendResponse(response);
     }
 

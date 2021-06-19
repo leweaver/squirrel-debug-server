@@ -66,6 +66,7 @@ export class SquidRuntime extends EventEmitter {
     //private _otherExceptions = false;
 
     private _debuggerHostnamePort = "localhost:8000";
+    private _ws?: WebSocket = undefined;
 
     private _status?: Status = undefined;
 
@@ -89,28 +90,35 @@ export class SquidRuntime extends EventEmitter {
         //this._currentLine = -1;
 
         //await this.verifyBreakpoints(this._sourceFile);
-
+/*
         if (stopOnEntry) {
             // we step once
-            this.step('stopOnEntry');
+            this.step();
         } else {
             // we just start to run until we hit a breakpoint or an exception
             this.continue();
         }
+        */
     }
 
     /**
      * Continue execution to the end/beginning.
      */
     public continue() {
-        this.run(undefined);
+        this._ws?.send('continue');
     }
 
     /**
      * Step to the next/previous non empty line.
      */
-    public step(event = 'stopOnStep') {
-        this.run(event);
+    public stepOut() {
+        this._ws?.send('step_out');
+    }
+    public stepOver() {
+        this._ws?.send('step_over');
+    }
+    public stepIn() {
+        this._ws?.send('step_in');
     }
 
     /**
@@ -127,16 +135,11 @@ export class SquidRuntime extends EventEmitter {
                     index: i,
                     name: statusStackEntry.function,
                     file: statusStackEntry.file,
-                    line: statusStackEntry.line
+                    line: statusStackEntry.line - 1
                 });
             }
         } else {
-            frames = [{
-                index: 0,
-                name: `helloWorld()`,
-                file: "hello world",
-                line: 1
-            }];
+            frames = [];
         }
         return {
             frames: frames,
@@ -233,7 +236,8 @@ export class SquidRuntime extends EventEmitter {
         logger.log('connectDebugger');
         let self = this;
         return new Promise<void>((resolve, reject) => {
-            const ws = new WebSocket(`ws://${hostnamePort}/ws`);
+            let ws = new WebSocket(`ws://${hostnamePort}/ws`);
+            self._ws = ws;
             ws.on('open', function open() {
                 ws.send("send_status");
                 resolve();
@@ -298,13 +302,6 @@ export class SquidRuntime extends EventEmitter {
             this._sourceLines[file] = contents.split(/\r?\n/);
         }
         return this._sourceLines[file];
-    }
-
-    /**
-     * Run through the file.
-     * If stepEvent is specified only run a single step and emit the stepEvent.
-     */
-    private run(stepEvent?: string) {
     }
 
     private sendEvent(event: string, ... args: any[]) {
