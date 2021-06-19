@@ -8,4 +8,6 @@ project(vscode_quirrel_debugger)
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(interfaces)
+add_subdirectory(embedded_server)
+add_subdirectory(squirrel_debugger)
 add_subdirectory(sample_app)

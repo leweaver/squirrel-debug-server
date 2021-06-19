@@ -10,55 +10,9 @@ set(CMAKE_CXX_STANDARD 17)
 ################################
 # Executable
 add_executable(sample_app
-    "main.cpp"
-
-################################
-# Dependencies
-include(FetchContent)
-
-# oatpp
-FetchContent_Declare(
-        oatpp
-        GIT_REPOSITORY https://github.com/oatpp/oatpp.git
-        GIT_TAG 9899786b235b2d987c8b131cdb01909727b98d4f
-)
-FetchContent_Declare(
-        oatpp-swagger
-        GIT_REPOSITORY https://github.com/oatpp/oatpp-swagger.git
-        GIT_TAG effa2635fc772260f17117bd15e256a44fdbbc18
-)
-FetchContent_Declare(
-        oatpp-websocket
-        GIT_REPOSITORY https://github.com/oatpp/oatpp-websocket.git
-        GIT_TAG 36c3ceaf4706e54390d020390081203fa2cc693c
-)
-set(OATPP_BUILD_TESTS OFF)
-FetchContent_MakeAvailable(oatpp)
-
-set(OATPP_MODULES_LOCATION CUSTOM)
-set(OATPP_DIR_SRC ${oatpp_SOURCE_DIR})
-set(OATPP_DIR_LIB ${oatpp_BINARY_DIR})
-FetchContent_MakeAvailable(oatpp-swagger)
-FetchContent_MakeAvailable(oatpp-websocket)
-
-get_target_property(OATPP_SWAGGER_SOURCE_DIR oatpp-swagger SOURCE_DIR)
-message("OATPP_SWAGGER_SOURCE_DIR=${OATPP_SWAGGER_SOURCE_DIR}")
-add_definitions(
-        ## define path to swagger-ui static resources folder
-        -DOATPP_SWAGGER_RES_PATH="${OATPP_SWAGGER_SOURCE_DIR}/../res"
-        )
-
-# quirrel
-FetchContent_Declare(
-        quirrel
-        GIT_REPOSITORY https://github.com/leweaver/quirrel.git
-)
-FetchContent_MakeAvailable(quirrel)
+    "main.cpp")
 
 target_link_libraries(${PROJECT_NAME}
-        qdb::interfaces
-        squirrel::squirrel_static
-        squirrel::sqstdlib_static
-        oatpp
-        oatpp-swagger
-        oatpp-websocket)
+        sdb::interfaces
+        sdb::embedded_server
+        sdb::squirrel_debugger)
