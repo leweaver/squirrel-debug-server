@@ -3,12 +3,12 @@
 //
 #pragma once
 
-#ifndef SAMPLE_APP_LOGGER_H
-#define SAMPLE_APP_LOGGER_H
+#ifndef LOGGER_H
+#define LOGGER_H
 
 #include <oatpp/core/base/Environment.hpp>
 
-namespace qdb {
+namespace sdb {
 class DebugStrLogger : public oatpp::base::Logger {
  public:
   /**
@@ -82,6 +82,6 @@ class DebugStrLogger : public oatpp::base::Logger {
    */
   bool isLogPriorityEnabled(v_uint32 priority) override;
 };
-}// namespace qdb
+}// namespace sdb
 
-#endif// SAMPLE_APP_LOGGER_H
+#endif// LOGGER_H

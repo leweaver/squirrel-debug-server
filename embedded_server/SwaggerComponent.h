@@ -1,12 +1,12 @@
 
-#ifndef SAMPLE_APP_SWAGGER_COMPONENT_H
-#define SAMPLE_APP_SWAGGER_COMPONENT_H
+#ifndef SWAGGER_COMPONENT_H
+#define SWAGGER_COMPONENT_H
 
 #include "oatpp-swagger/Model.hpp"
 #include "oatpp-swagger/Resources.hpp"
 #include "oatpp/core/macro/component.hpp"
 
-namespace qdb {
+namespace sdb {
 /**
  *  Swagger ui is served at
  *  http://host:port/swagger/ui
@@ -44,6 +44,6 @@ class SwaggerComponent {
     return oatpp::swagger::Resources::loadResources(OATPP_SWAGGER_RES_PATH);
   }());
 };
-}// namespace qdb
+}// namespace sdb
 
-#endif /* SAMPLE_APP_SWAGGER_COMPONENT_H */
+#endif /* SWAGGER_COMPONENT_H */

@@ -3,10 +3,10 @@
 //
 #pragma once
 
-#ifndef SAMPLE_APP_QUIRREL_DEBUGGER_H
-#define SAMPLE_APP_QUIRREL_DEBUGGER_H
+#ifndef SQUIRREL_DEBUGGER_H
+#define SQUIRREL_DEBUGGER_H
 
-#include "../debug-server/MessageInterface.h"
+#include <sdb/MessageInterface.h>
 
 #include <squirrel.h>
 
@@ -14,7 +14,7 @@
 #include <mutex>
 #include <condition_variable>
 
-class QuirrelDebugger : public qdb::MessageCommandInterface {
+class SquirrelDebugger : public sdb::MessageCommandInterface {
  public:
 
    // The following methods are called from the networking thread.
@@ -26,7 +26,7 @@ class QuirrelDebugger : public qdb::MessageCommandInterface {
   void SendStatus() override;
 
   // The following methods are called from the scripting engine thread
-  void SetEventInterface(std::shared_ptr<qdb::MessageEventInterface> eventInterface);
+  void SetEventInterface(std::shared_ptr<sdb::MessageEventInterface> eventInterface);
   void SetVm(HSQUIRRELVM vm);
   void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname);
 
@@ -40,7 +40,7 @@ class QuirrelDebugger : public qdb::MessageCommandInterface {
   };
   void Step(PauseType pauseType, int returnsRequired);
 
-  std::shared_ptr<qdb::MessageEventInterface> eventInterface_;
+  std::shared_ptr<sdb::MessageEventInterface> eventInterface_;
 
   // Pause Mechanism. First a pause is requested, then it is confirmed. We can only safely
   // read Squirrel state once the pause is confirmed, as it means that the scripting engine
@@ -54,15 +54,15 @@ class QuirrelDebugger : public qdb::MessageCommandInterface {
     int returnsRequired = 0;
 
     // The status as it was last time the application paused.
-    qdb::data::Status status = {};
+    sdb::data::Status status = {};
   } pauseMutexData_ = {};
   std::mutex pauseMutex_;
   std::condition_variable pauseCv_;
 
   // This must only be accesed within the Squirrel Execution Thread.
   struct SquirrelVmData {
-    void PopulateStack(std::vector<qdb::data::StackEntry>& stack) const;
-    void PopulateStackVariables(std::vector<qdb::data::StackEntry>& stack) const;
+    void PopulateStack(std::vector<sdb::data::StackEntry>& stack) const;
+    void PopulateStackVariables(std::vector<sdb::data::StackEntry>& stack) const;
 
     int currentStackDepth = 0;
     HSQUIRRELVM vm = nullptr;

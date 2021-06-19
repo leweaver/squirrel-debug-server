@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iomanip>
 
-using namespace qdb;
+using namespace sdb;
 
 #if defined(WIN32) || defined(_WIN32)
 #include <WinSock2.h>

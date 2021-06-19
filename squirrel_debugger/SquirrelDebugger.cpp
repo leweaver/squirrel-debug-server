@@ -1,4 +1,4 @@
-#include "QuirrelDebugger.h"
+#include "include/sdb/SquirrelDebugger.h"
 
 #include <squirrel.h>
 
@@ -16,9 +16,9 @@
 #include <mutex>
 #include <cassert>
 
-using qdb::data::Runstate;
-using qdb::data::StackEntry;
-using qdb::data::Status;
+using sdb::data::Runstate;
+using sdb::data::StackEntry;
+using sdb::data::Status;
 
 using LockGuard = std::lock_guard<std::recursive_mutex>;
 
@@ -268,15 +268,15 @@ std::string GetClassFullName(HSQUIRRELVM v) {
   throw std::runtime_error("Unknown class");
 }
 
-void QuirrelDebugger::SetEventInterface(std::shared_ptr<qdb::MessageEventInterface> eventInterface) {
+void SquirrelDebugger::SetEventInterface(std::shared_ptr<sdb::MessageEventInterface> eventInterface) {
   eventInterface_ = eventInterface;
 }
 
-void QuirrelDebugger::SetVm(HSQUIRRELVM vm) {
+void SquirrelDebugger::SetVm(HSQUIRRELVM vm) {
    vmData_.vm = vm;
 }
 
-void QuirrelDebugger::Pause() {
+void SquirrelDebugger::Pause() {
   if (pauseRequested_ == PauseType::None) {
     std::lock_guard<std::mutex> lock(pauseMutex_);
     if (pauseRequested_ == PauseType::None) {
@@ -286,7 +286,7 @@ void QuirrelDebugger::Pause() {
   }
 }
 
-void QuirrelDebugger::Continue() {
+void SquirrelDebugger::Continue() {
   if (pauseRequested_ != PauseType::None) {
     std::lock_guard<std::mutex> lock(pauseMutex_);
     pauseRequested_ = PauseType::None;
@@ -294,19 +294,19 @@ void QuirrelDebugger::Continue() {
   }
 }
 
-void QuirrelDebugger::StepOut() {
+void SquirrelDebugger::StepOut() {
   Step(PauseType::StepOut, 1);
 }
 
-void QuirrelDebugger::StepOver() {
+void SquirrelDebugger::StepOver() {
   Step(PauseType::StepOver, 0);
 }
   
-void QuirrelDebugger::StepIn() {
+void SquirrelDebugger::StepIn() {
   Step(PauseType::StepIn, -1);
 }
 
-void QuirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
+void SquirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
   std::lock_guard<std::mutex> lock(pauseMutex_);
   if (!pauseMutexData_.isPaused) {
     return;
@@ -317,7 +317,7 @@ void QuirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
   pauseCv_.notify_all();
 }
 
-void QuirrelDebugger::SendStatus() {
+void SquirrelDebugger::SendStatus() {
   // Don't allow unpause while we read the status.
   Status status;
   {
@@ -340,7 +340,7 @@ void QuirrelDebugger::SendStatus() {
   eventInterface_->OnStatus(std::move(status));
 }
 
-void QuirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {
+void SquirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {
   // 'c' called when a function has been called
   if (type == 'c') {
     ++vmData_.currentStackDepth;
@@ -390,7 +390,7 @@ void QuirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, con
   }
 }
 
-void QuirrelDebugger::SquirrelVmData::PopulateStack(std::vector<qdb::data::StackEntry>& stack) const {
+void SquirrelDebugger::SquirrelVmData::PopulateStack(std::vector<sdb::data::StackEntry>& stack) const {
   stack.clear();
 
   SQStackInfos si;
@@ -401,7 +401,7 @@ void QuirrelDebugger::SquirrelVmData::PopulateStack(std::vector<qdb::data::Stack
   }
 }
 
-void QuirrelDebugger::SquirrelVmData::PopulateStackVariables(std::vector<qdb::data::StackEntry>& stack) const {
+void SquirrelDebugger::SquirrelVmData::PopulateStackVariables(std::vector<sdb::data::StackEntry>& stack) const {
   /*
     SQStackInfos si;
     auto stackIdx = 0;

@@ -2,33 +2,31 @@
 // Created by Lewis weaver on 5/30/2021.
 //
 
-#include "Endpoint.h"
 #include "Logger.h"
-#include "MessageInterface.h"
-#include "SwaggerComponent.h"
+#include "include/sdb/EmbeddedServer.h"
 #include "dto/EventDto.h"
 
-#include "oatpp/core/macro/component.hpp"
-#include "oatpp/network/tcp/server/ConnectionProvider.hpp"
-#include "oatpp/parser/json/mapping/ObjectMapper.hpp"
-#include "oatpp/web/server/HttpConnectionHandler.hpp"
-#include "oatpp/web/server/HttpRouter.hpp"
+#include <oatpp/core/macro/component.hpp>
+#include <oatpp/core/collection/LinkedList.hpp>
+#include <oatpp/network/tcp/server/ConnectionProvider.hpp>
+#include <oatpp/network/Server.hpp>
+#include <oatpp/parser/json/mapping/ObjectMapper.hpp>
+#include <oatpp/web/server/HttpConnectionHandler.hpp>
+#include <oatpp/web/server/HttpRouter.hpp>
 
-
-#include "oatpp-swagger/Controller.hpp"
-#include "oatpp/network/Server.hpp"
+#include <oatpp-swagger/Controller.hpp>
 
 #include <iostream>
-#include <oatpp/core/collection/LinkedList.hpp>
 #include <sstream>
 
 #include "controller/TestAppController.h"
 #include "websocket/WSListener.h"
+#include "AppComponents.h"
 
 using oatpp::parser::json::mapping::ObjectMapper;
 using oatpp::data::mapping::type::Void;
 
-namespace qdb {
+namespace sdb {
 
 class OatMessageEventInterface : public MessageEventInterface {
  public:
@@ -37,7 +35,7 @@ class OatMessageEventInterface : public MessageEventInterface {
 
   void OnStatus(data::Status&& status) override {
     const auto statusDto = dto::Status::createShared();
-    statusDto->runstate = static_cast<qdb::dto::RunState>(status.runstate);
+    statusDto->runstate = static_cast<sdb::dto::RunState>(status.runstate);
     statusDto->stack = oatpp::List<oatpp::Object<dto::StackEntry>>::createShared();
     for (const auto& stackEntry : status.stack) {
       const auto stackEntryDto = dto::StackEntry::createShared();
@@ -59,15 +57,15 @@ class OatMessageEventInterface : public MessageEventInterface {
   std::shared_ptr<WSInstanceListener> webSocketInstanceListener_;
 };
 
-class EndpointImpl : public Endpoint {
+class EndpointImpl : public EmbeddedServer {
 
  public:
   void SetCommandInterface(std::shared_ptr<MessageCommandInterface> messageCommandInterface) override {
 
     /* create ApiControllers and add endpoints to router */
-    appComponents_ = std::make_shared<TestAppComponent>(messageCommandInterface);
+    appComponents_ = std::make_shared<AppComponents>(messageCommandInterface);
 
-    auto router = appComponents_->httpRouter.getObject();
+    OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, router);
     std::shared_ptr<oatpp::web::server::api::ApiController::Endpoints> docEndpoints = oatpp::swagger::Controller::Endpoints::createShared();
 
     testAppController_ = TestAppController::createShared();
@@ -112,7 +110,7 @@ class EndpointImpl : public Endpoint {
   }
 
   std::shared_ptr<OatMessageEventInterface> eventInterface_;
-  std::shared_ptr<TestAppComponent> appComponents_;
+  std::shared_ptr<AppComponents> appComponents_;
 
   // Controllers
   std::shared_ptr<oatpp::web::server::api::ApiController> testAppController_;
@@ -123,17 +121,17 @@ class EndpointImpl : public Endpoint {
   static constexpr const char* TAG = "Server_Endpoint";
 };
 
-Endpoint* Endpoint::Create() {
+EmbeddedServer* EmbeddedServer::Create() {
   return new EndpointImpl();
 }
 
-void Endpoint::InitEnvironment() {
+void EmbeddedServer::InitEnvironment() {
   std::cout << OATPP_SWAGGER_RES_PATH << std::endl;
   oatpp::base::Environment::init();
   oatpp::base::Environment::setLogger(std::make_shared<DebugStrLogger>());
 }
 
-void Endpoint::ShutdownEnvironment() {
+void EmbeddedServer::ShutdownEnvironment() {
   /* Print how much objects were created during app running, and what have left-probably leaked */
   /* Disable object counting for release builds using '-D OATPP_DISABLE_ENV_OBJECT_COUNTERS' flag for better performance */
   {
@@ -150,4 +148,4 @@ void Endpoint::ShutdownEnvironment() {
   oatpp::base::Environment::destroy();
 }
 
-}// namespace qdb
+}// namespace sdb

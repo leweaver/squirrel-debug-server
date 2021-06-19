@@ -1,8 +1,8 @@
 #include <squirrel.h>
-#include "debugger/QuirrelDebugger.h"
 
-#include "debug-server/Endpoint.h"
-#include "debug-server/MessageInterface.h"
+#include <sdb/MessageInterface.h>
+#include <sdb/EmbeddedServer.h>
+#include <sdb/SquirrelDebugger.h>
 
 #include <sqstdio.h>
 #include <sqstdmath.h>
@@ -22,7 +22,7 @@
 using std::cerr;
 using std::cout;
 using std::endl;
-using qdb::Endpoint;
+using sdb::EmbeddedServer;
 
 void compile() {}
 
@@ -77,7 +77,7 @@ void SquirrelPrintErrCallback(HSQUIRRELVM vm, const SQChar* text, ...) {
 
 struct VmInfo {
   HSQUIRRELVM v;
-  std::shared_ptr<QuirrelDebugger> debugger;
+  std::shared_ptr<SquirrelDebugger> debugger;
 };
 std::vector<VmInfo> vms;
 std::mutex vmsMutex;
@@ -88,7 +88,7 @@ void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* source
   iter->debugger->SquirrelNativeDebugHook(v, type, sourcename, line, funcname);
 }
 
-void run(std::shared_ptr<QuirrelDebugger> debugger) {
+void run(std::shared_ptr<SquirrelDebugger> debugger) {
   HSQUIRRELVM v = sq_open(1024);//creates a VM with initial stack size 1024
   {
     std::lock_guard<std::mutex> lock(vmsMutex);
@@ -139,10 +139,10 @@ void run(std::shared_ptr<QuirrelDebugger> debugger) {
 
 int main(int argc, char* argv[]) {
   
-  Endpoint::InitEnvironment();
+  EmbeddedServer::InitEnvironment();
 
-  std::unique_ptr<Endpoint> ep(Endpoint::Create());
-  auto debugger = std::make_shared<QuirrelDebugger>();
+  std::unique_ptr<EmbeddedServer> ep(EmbeddedServer::Create());
+  auto debugger = std::make_shared<SquirrelDebugger>();
 
   ep->SetCommandInterface(debugger);
   debugger->SetEventInterface(ep->GetEventInterface());
@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
   ep->Stop(true);
   ep.reset();
 
-  Endpoint::ShutdownEnvironment();
+  EmbeddedServer::ShutdownEnvironment();
 
   return 0;
 }

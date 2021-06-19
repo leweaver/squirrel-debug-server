@@ -3,15 +3,16 @@
 //
 #pragma once
 
-#ifndef SAMPLE_APP_EVENT_DTO_H
-#define SAMPLE_APP_EVENT_DTO_H
-#include "oatpp/codegen/dto/enum_define.hpp"
-#include "oatpp/core/Types.hpp"
-#include "oatpp/core/macro/codegen.hpp"
+#ifndef EVENT_DTO_H
+#define EVENT_DTO_H
+
+#include <oatpp/codegen/dto/enum_define.hpp>
+#include <oatpp/core/Types.hpp>
+#include <oatpp/core/macro/codegen.hpp>
 
 #include OATPP_CODEGEN_BEGIN(DTO)///< Begin DTO codegen section
 
-namespace qdb::dto {
+namespace sdb::dto {
 ENUM(CommandMessageType, v_int32,
      VALUE(Pause, 0, "pause"),
      VALUE(Continue, 1, "continue"),
@@ -71,4 +72,4 @@ class Status : public oatpp::DTO {
 
 #include OATPP_CODEGEN_END(DTO)///< End DTO codegen section
 
-#endif// SAMPLE_APP_EVENT_DTO_H
+#endif// EVENT_DTO_H

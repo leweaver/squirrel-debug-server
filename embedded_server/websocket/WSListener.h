@@ -9,16 +9,16 @@
 #include "oatpp-websocket/ConnectionHandler.hpp"
 #include "oatpp-websocket/WebSocket.hpp"
 
-#include "../MessageInterface.h"
-
 #include <memory>
 #include <vector>
+
+#include <sdb/MessageInterface.h>
 
 namespace oatpp::parser::json::mapping {
 class ObjectMapper;
 }
 
-namespace qdb {
+namespace sdb {
 /**
  * WebSocket listener listens on incoming WebSocket events.
  */
@@ -60,7 +60,6 @@ class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
    */
   oatpp::data::stream::ChunkedBuffer messageBuffer_;
   std::shared_ptr<MessageCommandInterface> commandInterface_;
-  std::shared_ptr<ObjectMapper> mapper_;
 };
 
 /**

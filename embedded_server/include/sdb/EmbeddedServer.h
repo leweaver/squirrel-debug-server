@@ -4,23 +4,23 @@
 
 #pragma once
 
-#ifndef SAMPLE_APP_ENDPOINT_H
-#define SAMPLE_APP_ENDPOINT_H
+#ifndef EMBEDDED_SERVER_H
+#define EMBEDDED_SERVER_H
 
-#include "MessageInterface.h"
+#include <sdb/MessageInterface.h>
 
 #include <memory>
 #include <thread>
 
-namespace qdb {
-class Endpoint {
+namespace sdb {
+class EmbeddedServer {
  public:
-  virtual ~Endpoint() = default;
+  virtual ~EmbeddedServer() = default;
 
   static void InitEnvironment();
   static void ShutdownEnvironment();
 
-  static Endpoint* Create();
+  static EmbeddedServer* Create();
 
   virtual std::shared_ptr<MessageEventInterface> GetEventInterface() const = 0;
   virtual void SetCommandInterface(std::shared_ptr<MessageCommandInterface> messageCommandInterface) = 0;
@@ -30,8 +30,8 @@ class Endpoint {
   virtual void Stop(bool join = true) = 0;
 
   protected: 
-    Endpoint() = default;
+    EmbeddedServer() = default;
 };
-}// namespace qdb
+}// namespace sdb
 
-#endif//SAMPLE_APP_ENDPOINT_H
+#endif // EMBEDDED_SERVER_H

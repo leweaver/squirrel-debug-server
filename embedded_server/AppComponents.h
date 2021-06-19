@@ -8,21 +8,25 @@
 #define APP_COMPONENTS_H
 
 
-#include "oatpp/parser/json/mapping/ObjectMapper.hpp"
+#include <oatpp/parser/json/mapping/ObjectMapper.hpp>
 
-#include "oatpp/network/tcp/server/ConnectionProvider.hpp"
-#include "oatpp/web/server/HttpConnectionHandler.hpp"
+#include <oatpp/network/tcp/server/ConnectionProvider.hpp>
+#include <oatpp/web/server/HttpConnectionHandler.hpp>
 
-#include "oatpp/core/macro/component.hpp"
+#include <oatpp/core/macro/component.hpp>
 
-#include <qdb/MessageInterface.h>
+#include <sdb/MessageInterface.h>
 
-namespace qdb::server {
+#include "websocket/WSListener.h"
+#include "SwaggerComponent.h"
+
+namespace sdb {
 /**
  *  Class which creates and holds Application components and registers components in oatpp::base::Environment
  *  Order of components initialization is from top to bottom
  */
 class AppComponents {
+ public:
   explicit AppComponents(std::shared_ptr<MessageCommandInterface> commandInterface)
       : webSocketInstanceListener_(CreateWebSocketInstanceListener(commandInterface)), webSocketConnectionHandler_(CreateWebSocketConnectionHandler(webSocketInstanceListener_)) {
   }
@@ -85,6 +89,6 @@ class AppComponents {
   std::shared_ptr<WSInstanceListener> webSocketInstanceListener_;
   oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler_;
 };
-}// namespace qdb::server
+}// namespace sdb::server
 
 #endif

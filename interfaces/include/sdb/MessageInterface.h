@@ -3,14 +3,14 @@
 //
 #pragma once
 
-#ifndef QDB_MESSAGE_INTERFACE_H
-#define QDB_MESSAGE_INTERFACE_H
+#ifndef SDB_MESSAGE_INTERFACE_H
+#define SDB_MESSAGE_INTERFACE_H
 
 #include <vector>
 #include <string>
 #include <cinttypes>
 
-namespace qdb {
+namespace sdb {
 namespace data {
 enum class Runstate {
   Running = 0,
