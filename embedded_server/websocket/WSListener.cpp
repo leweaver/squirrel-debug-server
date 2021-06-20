@@ -8,8 +8,8 @@ using sdb::WSInstanceListener;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // RemoteConnection
 
-RemoteConnection::RemoteConnection(const WebSocket& webSocket, std::shared_ptr<MessageCommandInterface> commandInterface)
-    : webSocket_(webSocket), commandInterface_(commandInterface) {}
+RemoteConnection::RemoteConnection(const WebSocket& webSocket)
+    : webSocket_(webSocket) {}
 
 void RemoteConnection::onPing(const WebSocket& socket, const oatpp::String& message) {
   OATPP_LOGD(TAG, "onPing");
@@ -32,7 +32,6 @@ void RemoteConnection::readMessage(const WebSocket& socket, v_uint8 opcode, p_ch
     messageBuffer_.clear();
 
     OATPP_LOGD(TAG, "onMessage message='%s'", wholeMessage->c_str());
-    handleCommandMessage(socket, wholeMessage);
 
   } else if(size > 0) { // message frame received
     messageBuffer_.writeSimple(data, size);
@@ -41,29 +40,6 @@ void RemoteConnection::readMessage(const WebSocket& socket, v_uint8 opcode, p_ch
 
 void RemoteConnection::sendMessage(const oatpp::String& message) {
   webSocket_.sendOneFrameText(message);
-}
-
-void RemoteConnection::handleCommandMessage(const WebSocket& socket, const oatpp::String& message) {
-  OATPP_LOGD(TAG, "handleCommandMessage message='%s'", message->c_str());
-
-
-
-  if (message == "pause") {
-    commandInterface_->Pause();
-  } else if (message == "continue") {
-    commandInterface_->Continue();
-  } else if (message == "step_out") {
-    commandInterface_->StepOut();
-  } else if (message == "step_over") {
-    commandInterface_->StepOver();
-  } else if (message == "step_in") {
-    commandInterface_->StepIn();
-  } else if (message == "send_status") {
-    commandInterface_->SendStatus();
-  } else {
-    socket.sendOneFrameText("err: unknown command " + message);
-    return;
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -85,7 +61,7 @@ void WSInstanceListener::onAfterCreate(const oatpp::websocket::WebSocket& socket
   auto oldCount = SOCKETS.fetch_add(1);
   OATPP_LOGD(TAG, "New Incoming Connection. Connection count=%d", oldCount + 1);
 
-  auto remoteConnection = std::make_shared<RemoteConnection>(socket, commandInterface_);
+  auto remoteConnection = std::make_shared<RemoteConnection>(socket);
   socket.setListener(remoteConnection);
 
   connections_.push_back(remoteConnection);

@@ -16,11 +16,11 @@ add_library(${PROJECT_NAME} STATIC
     "Logger.cpp"
     "AppComponents.h"
     "AppComponents.cpp"
-    "controller/TestAppController.h"
+    "controller/DebugCommandController.h"
     "dto/EventDto.h"
     "websocket/WSListener.h"
     "websocket/WSListener.cpp"
-)
+ "controller/StaticController.h" "controller/WebsocketController.h")
 
 add_library(sdb::embedded_server ALIAS embedded_server)
 

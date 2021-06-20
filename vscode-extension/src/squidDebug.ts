@@ -442,13 +442,11 @@ export class SquidDebugSession extends DebugSession {
     }
 
     protected continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments): void {
-        this._runtime.continue();
-        this.sendResponse(response);
+        this._runtime.continue().then(() => this.sendResponse(response));
     }
 
     protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
-        this._runtime.stepOver();
-        this.sendResponse(response);
+        this._runtime.stepOver().then(() => this.sendResponse(response));
     }
 
     protected stepInTargetsRequest(response: DebugProtocol.StepInTargetsResponse, args: DebugProtocol.StepInTargetsArguments) {
@@ -465,13 +463,11 @@ export class SquidDebugSession extends DebugSession {
     }
 
     protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments): void {
-        this._runtime.stepIn();
-        this.sendResponse(response);
+        this._runtime.stepIn().then(() => this.sendResponse(response));
     }
 
     protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments): void {
-        this._runtime.stepOut();
-        this.sendResponse(response);
+        this._runtime.stepOut().then(() => this.sendResponse(response));
     }
 
     protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments): Promise<void> {

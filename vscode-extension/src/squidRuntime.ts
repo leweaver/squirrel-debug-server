@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import { EventMessage, EventMessageType, Status, Runstate } from './squidDto';
 
 //import encodeUrl = require('encodeurl');
-//import got = require('got');
+import got = require('got');
 import WebSocket = require('ws');
 
 export interface FileAccessor {
@@ -66,7 +66,6 @@ export class SquidRuntime extends EventEmitter {
     //private _otherExceptions = false;
 
     private _debuggerHostnamePort = "localhost:8000";
-    private _ws?: WebSocket = undefined;
 
     private _status?: Status = undefined;
 
@@ -104,21 +103,21 @@ export class SquidRuntime extends EventEmitter {
     /**
      * Continue execution to the end/beginning.
      */
-    public continue() {
-        this._ws?.send('continue');
+    public async continue() {
+        await this.sendCommand('continue');
     }
 
     /**
      * Step to the next/previous non empty line.
      */
-    public stepOut() {
-        this._ws?.send('step_out');
+    public async stepOut() {
+        await this.sendCommand('step_out');
     }
-    public stepOver() {
-        this._ws?.send('step_over');
+    public async stepOver() {
+        await this.sendCommand('step_over');
     }
-    public stepIn() {
-        this._ws?.send('step_in');
+    public async stepIn() {
+        await this.sendCommand('step_in');
     }
 
     /**
@@ -237,7 +236,6 @@ export class SquidRuntime extends EventEmitter {
         let self = this;
         return new Promise<void>((resolve, reject) => {
             let ws = new WebSocket(`ws://${hostnamePort}/ws`);
-            self._ws = ws;
             ws.on('open', function open() {
                 ws.send("send_status");
                 resolve();
@@ -246,6 +244,10 @@ export class SquidRuntime extends EventEmitter {
             ws.on('error', (evt: WebSocket.ErrorEvent) => {
                 logger.error(evt.message);
                 reject("Failed to connect: " + evt.message);
+            });
+            ws.on('close', (code: number, reason: string) => {
+                logger.log(`Websocket connection closed (${code}: ${reason}`);
+                this.emit('end');
             });
         });
     }
@@ -280,6 +282,13 @@ export class SquidRuntime extends EventEmitter {
 
         logger.log("Handled message: " + message.type);
         return Promise.resolve();
+    }
+
+    private async sendCommand(commandName: string) {
+        const {body} = await got.put(`http://${this._debuggerHostnamePort}/DebugCommand/${commandName}`, {
+            json: true
+        });
+        return body.data;
     }
 
     private updateStatus(status: Status) {

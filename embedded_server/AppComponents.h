@@ -27,8 +27,8 @@ namespace sdb {
  */
 class AppComponents {
  public:
-  explicit AppComponents(std::shared_ptr<MessageCommandInterface> commandInterface)
-      : webSocketInstanceListener_(CreateWebSocketInstanceListener(commandInterface)), webSocketConnectionHandler_(CreateWebSocketConnectionHandler(webSocketInstanceListener_)) {
+  explicit AppComponents()
+      : webSocketInstanceListener_(CreateWebSocketInstanceListener()), webSocketConnectionHandler_(CreateWebSocketConnectionHandler(webSocketInstanceListener_)) {
   }
 
   static oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>
@@ -39,8 +39,8 @@ class AppComponents {
             "websocket" /* qualifier */, connectionHandler);
   }
 
-  static std::shared_ptr<WSInstanceListener> CreateWebSocketInstanceListener(std::shared_ptr<MessageCommandInterface> commandInterface) {
-    return std::make_shared<WSInstanceListener>(commandInterface);
+  static std::shared_ptr<WSInstanceListener> CreateWebSocketInstanceListener() {
+    return std::make_shared<WSInstanceListener>();
   }
 
   /**

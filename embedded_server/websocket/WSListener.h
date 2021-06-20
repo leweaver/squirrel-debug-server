@@ -24,7 +24,7 @@ namespace sdb {
  */
 class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
  public:
-  RemoteConnection(const WebSocket& webSocket, std::shared_ptr<MessageCommandInterface> commandInterface);
+  RemoteConnection(const WebSocket& webSocket);
 
   /**
    * Called on "ping" frame.
@@ -59,7 +59,6 @@ class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
    * Buffer for messages. Needed for multi-frame messages.
    */
   oatpp::data::stream::ChunkedBuffer messageBuffer_;
-  std::shared_ptr<MessageCommandInterface> commandInterface_;
 };
 
 /**
@@ -67,8 +66,7 @@ class RemoteConnection : public oatpp::websocket::WebSocket::Listener {
  */
 class WSInstanceListener : public oatpp::websocket::ConnectionHandler::SocketInstanceListener {
  public:
-  WSInstanceListener(std::shared_ptr<MessageCommandInterface> commandInterface)
-      : commandInterface_(commandInterface) {}
+  WSInstanceListener() = default;
   /**
    * Counter for connected clients.
    */
@@ -88,7 +86,6 @@ class WSInstanceListener : public oatpp::websocket::ConnectionHandler::SocketIns
 
  private:
   static constexpr const char* TAG = "Server_WSInstanceListener";
-  std::shared_ptr<MessageCommandInterface> commandInterface_;
   std::vector<std::shared_ptr<RemoteConnection>> connections_;
 };
 }// namespace qdb

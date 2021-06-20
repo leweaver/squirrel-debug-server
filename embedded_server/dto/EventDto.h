@@ -38,19 +38,10 @@ class EventMessageWrapper : public oatpp::DTO {
   DTO_FIELD(Object<TMessageBody>, message);
 };
 
-template<typename TMessageBody>
-class CommandMessageTypeOnly : public oatpp::DTO {
-  DTO_INIT(CommandMessageTypeOnly, DTO)
+class CommandMessageResponse : public oatpp::DTO {
+  DTO_INIT(CommandMessageResponse, DTO)
 
-  DTO_FIELD(Enum<CommandMessageType>, type);
-};
-
-template<typename TMessageBody>
-class CommandMessageWrapper : public oatpp::DTO {
-  DTO_INIT(CommandMessageWrapper, DTO)
-
-  DTO_FIELD(Enum<CommandMessageType>, type);
-  DTO_FIELD(Object<TMessageBody>, message);
+  DTO_FIELD(Int32, code);
 };
 
 class StackEntry : public oatpp::DTO {
