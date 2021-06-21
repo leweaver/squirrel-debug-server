@@ -11,19 +11,20 @@
 #include <squirrel.h>
 
 #include <atomic>
-#include <mutex>
 #include <condition_variable>
+#include <mutex>
 
+namespace sdb {
 class SquirrelDebugger : public sdb::MessageCommandInterface {
  public:
-
-   // The following methods are called from the networking thread.
-  void Pause() override;
-  void Continue() override;
-  void StepOut() override;
-  void StepOver() override;
-  void StepIn() override;
-  void SendStatus() override;
+  // The following methods are called from the networking thread.
+  [[nodiscard]] data::ReturnCode Pause() override;
+  [[nodiscard]] data::ReturnCode Continue() override;
+  [[nodiscard]] data::ReturnCode StepOut() override;
+  [[nodiscard]] data::ReturnCode StepOver() override;
+  [[nodiscard]] data::ReturnCode StepIn() override;
+  [[nodiscard]] data::ReturnCode SendStatus() override;
+  [[nodiscard]] data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path, std::vector<data::Variable>& variables) override;
 
   // The following methods are called from the scripting engine thread
   void SetEventInterface(std::shared_ptr<sdb::MessageEventInterface> eventInterface);
@@ -38,7 +39,7 @@ class SquirrelDebugger : public sdb::MessageCommandInterface {
     StepIn,
     Pause = StepIn
   };
-  void Step(PauseType pauseType, int returnsRequired);
+  [[nodiscard]] data::ReturnCode Step(PauseType pauseType, int returnsRequired);
 
   std::shared_ptr<sdb::MessageEventInterface> eventInterface_;
 
@@ -68,5 +69,6 @@ class SquirrelDebugger : public sdb::MessageCommandInterface {
     HSQUIRRELVM vm = nullptr;
   } vmData_;
 };
+}// namespace sdb
 
 #endif// SAMPLE_APP_QUIRREL_DEBUGGER_H

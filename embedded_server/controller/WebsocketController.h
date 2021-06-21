@@ -15,23 +15,21 @@
 #include OATPP_CODEGEN_BEGIN(ApiController)
 
 namespace sdb {
-class WebsocketController : public oatpp::web::server::api::ApiController {
+class WebsocketController final : public oatpp::web::server::api::ApiController {
  public:
-  WebsocketController(const std::shared_ptr<ObjectMapper>& objectMapper)
-      : oatpp::web::server::api::ApiController(objectMapper) {}
+  WebsocketController(const std::shared_ptr<ObjectMapper>& objectMapper) : ApiController(objectMapper) {}
 
-  static std::shared_ptr<WebsocketController> createShared(
-          OATPP_COMPONENT(std::shared_ptr<ObjectMapper>, objectMapper)// Inject objectMapper component here as default parameter
-  ) {
+  static std::shared_ptr<WebsocketController> createShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>,
+                                                                           objectMapper)) {
     return std::make_shared<WebsocketController>(objectMapper);
   }
 
   ENDPOINT("GET", "ws", ws, REQUEST(std::shared_ptr<IncomingRequest>, request)) {
-    return oatpp::websocket::Handshaker::serversideHandshake(request->getHeaders(), websocketConnectionHandler);
+    return oatpp::websocket::Handshaker::serversideHandshake(request->getHeaders(), websocketConnectionHandler_);
   };
 
  private:
-  OATPP_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, websocketConnectionHandler, "websocket");
+  OATPP_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, websocketConnectionHandler_, "websocket");
 };
 }// namespace sdb
 

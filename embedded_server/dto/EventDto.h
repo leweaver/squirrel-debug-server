@@ -6,7 +6,6 @@
 #ifndef EVENT_DTO_H
 #define EVENT_DTO_H
 
-#include <oatpp/codegen/dto/enum_define.hpp>
 #include <oatpp/core/Types.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 
@@ -30,6 +29,12 @@ ENUM(RunState, v_int32,
      VALUE(Paused, 2, "paused"),
      VALUE(Stepping, 3, "stepping"))
 
+ENUM(VariableType, v_int32,
+     VALUE(String, 0, "string"),
+     VALUE(Bool, 1, "bool"),
+     VALUE(Integer, 2, "integer"),
+     VALUE(Float, 3, "float"))
+
 template<typename TMessageBody>
 class EventMessageWrapper : public oatpp::DTO {
   DTO_INIT(EventMessageWrapper, DTO)
@@ -42,6 +47,20 @@ class CommandMessageResponse : public oatpp::DTO {
   DTO_INIT(CommandMessageResponse, DTO)
 
   DTO_FIELD(Int32, code);
+};
+
+class Variable : public oatpp::DTO {
+  DTO_INIT(Variable, DTO)
+
+  DTO_FIELD(String, name);
+  DTO_FIELD(Enum<VariableType>, type);
+  DTO_FIELD(String, value);
+};
+
+class VariableList : public oatpp::DTO {
+  DTO_INIT(VariableList, DTO)
+
+  DTO_FIELD(List<Object<Variable>>, variables);
 };
 
 class StackEntry : public oatpp::DTO {
@@ -59,7 +78,7 @@ class Status : public oatpp::DTO {
   DTO_FIELD(Enum<RunState>, runstate);
   DTO_FIELD(List<Object<StackEntry>>, stack);
 };
-}// namespace qdb::dto
+}// namespace sdb::dto
 
 #include OATPP_CODEGEN_END(DTO)///< End DTO codegen section
 

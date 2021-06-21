@@ -6,12 +6,24 @@
 #ifndef SDB_MESSAGE_INTERFACE_H
 #define SDB_MESSAGE_INTERFACE_H
 
-#include <vector>
-#include <string>
 #include <cinttypes>
+#include <string>
+#include <vector>
 
 namespace sdb {
 namespace data {
+enum class ReturnCode
+{
+  // Everything was all good
+  Success = 0,
+
+  // Invalid means user input to a call caused the call to fail
+  Invalid = 100,
+  InvalidNotPaused = 101,
+
+  // Error means something went wrong inside the implementation, not good.
+  ErrorInternal = 200
+};
 enum class Runstate {
   Running = 0,
   Pausing = 1,
@@ -27,6 +39,17 @@ struct Status {
   Runstate runstate;
   std::vector<StackEntry> stack;
 };
+enum class VariableType {
+  String,
+  Bool,
+  Integer,
+  Float
+};
+struct Variable {
+  std::string name;
+  VariableType type;
+  std::string value;
+};
 }// namespace data
 
 /// <summary>
@@ -38,32 +61,34 @@ class MessageCommandInterface {
   /// <summary>
   /// Instructs the program to pause execution at its current point
   /// </summary>
-  virtual void Pause() = 0;
+  [[nodiscard]] virtual data::ReturnCode Pause() = 0;
 
   /// <summary>
   /// Instructs the program to resume execution if it was previously paused
   /// </summary>
-  virtual void Continue() = 0;
+  [[nodiscard]] virtual data::ReturnCode Continue() = 0;
 
   /// <summary>
   /// Instructs the program to execute until it pops 1 level up the stack if it was previously paused
   /// </summary>
-  virtual void StepOut() = 0;
+  [[nodiscard]] virtual data::ReturnCode StepOut() = 0;
 
   /// <summary>
   /// Instructs the program to execute until it reaches another line at this stack level
   /// </summary>
-  virtual void StepOver() = 0;
+  [[nodiscard]] virtual data::ReturnCode StepOver() = 0;
 
   /// <summary>
   /// Instructs the program to execute a single step if it was previously paused
   /// </summary>
-  virtual void StepIn() = 0;
+  [[nodiscard]] virtual data::ReturnCode StepIn() = 0;
 
   /// <summary>
   /// Instructs the program to send out current state: ie playing or paused.
   /// </summary>
-  virtual void SendStatus() = 0;
+  [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
+
+  [[nodiscard]] virtual data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path, std::vector<data::Variable>& variables) = 0;
 };
 
 /// <summary>
@@ -74,6 +99,6 @@ class MessageEventInterface {
  public:
   virtual void OnStatus(data::Status&& status) = 0;
 };
-}// namespace qdb
+}// namespace sdb
 
 #endif

@@ -2,23 +2,20 @@
 
 #include <squirrel.h>
 
-#include <sqstdio.h>
-#include <sqstdmath.h>
-#include <sqstdstring.h>
-#include <sqstdsystem.h>
-
 #include <array>
 #include <cstdarg>
-#include <iostream>
-#include <map>
 #include <sstream>
 #include <unordered_map>
 #include <mutex>
 #include <cassert>
 
+using sdb::SquirrelDebugger;
+using sdb::data::ReturnCode;
 using sdb::data::Runstate;
 using sdb::data::StackEntry;
 using sdb::data::Status;
+using sdb::data::Variable;
+using sdb::data::VariableType;
 
 using LockGuard = std::lock_guard<std::recursive_mutex>;
 
@@ -276,52 +273,71 @@ void SquirrelDebugger::SetVm(HSQUIRRELVM vm) {
    vmData_.vm = vm;
 }
 
-void SquirrelDebugger::Pause() {
+ReturnCode SquirrelDebugger::Pause() {
   if (pauseRequested_ == PauseType::None) {
-    std::lock_guard<std::mutex> lock(pauseMutex_);
+    std::lock_guard lock(pauseMutex_);
     if (pauseRequested_ == PauseType::None) {
       pauseRequested_ = PauseType::Pause;
       pauseMutexData_.returnsRequired = -1;
     }
   }
+  return ReturnCode::Success;
 }
 
-void SquirrelDebugger::Continue() {
+ReturnCode SquirrelDebugger::Continue() {
   if (pauseRequested_ != PauseType::None) {
-    std::lock_guard<std::mutex> lock(pauseMutex_);
-    pauseRequested_ = PauseType::None;
-    pauseCv_.notify_all();
+    std::lock_guard lock(pauseMutex_);
+    if (pauseRequested_ != PauseType::None) {
+      pauseRequested_ = PauseType::None;
+      pauseCv_.notify_all();
+      return ReturnCode::Success;
+    }
   }
+  return ReturnCode::InvalidNotPaused;
 }
 
-void SquirrelDebugger::StepOut() {
-  Step(PauseType::StepOut, 1);
+ReturnCode SquirrelDebugger::StepOut() {
+  return Step(PauseType::StepOut, 1);
 }
 
-void SquirrelDebugger::StepOver() {
-  Step(PauseType::StepOver, 0);
+ReturnCode SquirrelDebugger::StepOver() {
+  return Step(PauseType::StepOver, 0);
 }
   
-void SquirrelDebugger::StepIn() {
-  Step(PauseType::StepIn, -1);
+ReturnCode SquirrelDebugger::StepIn() {
+  return Step(PauseType::StepIn, -1);
 }
 
-void SquirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
-  std::lock_guard<std::mutex> lock(pauseMutex_);
+ReturnCode SquirrelDebugger::GetStackLocals(int32_t stackFrame, const std::string& path, std::vector<Variable>& variables) {
+  std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_.isPaused) {
-    return;
+    return ReturnCode::InvalidNotPaused;
+  }
+
+  Variable v = {"lewis", VariableType::String, "rocks"};
+  variables.emplace_back(std::move(v));
+
+  return ReturnCode::Success;
+}
+
+ReturnCode SquirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
+  std::lock_guard lock(pauseMutex_);
+  if (!pauseMutexData_.isPaused) {
+    return ReturnCode::InvalidNotPaused;
   }
 
   pauseMutexData_.returnsRequired = returnsRequired;
   pauseRequested_ = pauseType;
   pauseCv_.notify_all();
+
+  return ReturnCode::Success;
 }
 
-void SquirrelDebugger::SendStatus() {
+ReturnCode SquirrelDebugger::SendStatus() {
   // Don't allow unpause while we read the status.
   Status status;
   {
-    std::lock_guard<std::mutex> lock(pauseMutex_);
+    std::lock_guard lock(pauseMutex_);
     if (pauseRequested_ != PauseType::None) {
       if (pauseMutexData_.isPaused) {
         // Make a copy of the last known status.
@@ -338,6 +354,7 @@ void SquirrelDebugger::SendStatus() {
   }
 
   eventInterface_->OnStatus(std::move(status));
+  return ReturnCode::Success;
 }
 
 void SquirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {

@@ -1,7 +1,7 @@
 #include <squirrel.h>
 
-#include <sdb/MessageInterface.h>
 #include <sdb/EmbeddedServer.h>
+#include <sdb/MessageInterface.h>
 #include <sdb/SquirrelDebugger.h>
 
 #include <sqstdio.h>
@@ -10,26 +10,27 @@
 #include <sqstdsystem.h>
 
 #include <array>
+#include <cassert>
 #include <cstdarg>
+#include <functional>
 #include <iostream>
 #include <map>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 #include <unordered_map>
-#include <functional>
-#include <assert.h>
 
+using sdb::EmbeddedServer;
+using sdb::SquirrelDebugger;
+using sdb::data::ReturnCode;
 using std::cerr;
 using std::cout;
 using std::endl;
-using sdb::EmbeddedServer;
 
 void compile() {}
 
-SQInteger File_LexFeedAscii(SQUserPointer file) { 
+SQInteger File_LexFeedAscii(SQUserPointer file) {
   char c;
-  if (fread(&c, sizeof(c), 1, static_cast<FILE*>(file)) > 0)
-    return c; 
+  if (fread(&c, sizeof(c), 1, static_cast<FILE*>(file)) > 0) return c;
   return 0;
 }
 
@@ -37,9 +38,7 @@ SQRESULT CompileFile(HSQUIRRELVM v, const char* filename) {
   auto* f = fopen(filename, "rb");
   if (f) {
     const auto res = sq_compile(v, File_LexFeedAscii, f, filename, 1);
-    if (SQ_FAILED(res)) {
-      cerr << "Failed to compile" << endl;
-    }
+    if (SQ_FAILED(res)) { cerr << "Failed to compile" << endl; }
     fclose(f);
     return res;
   }
@@ -47,8 +46,8 @@ SQRESULT CompileFile(HSQUIRRELVM v, const char* filename) {
   return SQ_ERROR;
 }
 
-void SquirrelOnCompileError(HSQUIRRELVM /*v*/, const SQChar* desc, const SQChar* source,
-                            const SQInteger line, const SQInteger column) {
+void SquirrelOnCompileError(HSQUIRRELVM /*v*/, const SQChar* desc, const SQChar* source, const SQInteger line,
+                            const SQInteger column) {
   cerr << "Failed to compile script: " << source << ": " << line << " (col " << column << ")" << desc;
 }
 
@@ -82,7 +81,8 @@ struct VmInfo {
 std::vector<VmInfo> vms;
 std::mutex vmsMutex;
 
-void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {
+void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line,
+                             const SQChar* funcname) {
   auto iter = std::find_if(vms.begin(), vms.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
   assert(iter != vms.end());
   iter->debugger->SquirrelNativeDebugHook(v, type, sourcename, line, funcname);
@@ -91,7 +91,7 @@ void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* source
 void run(std::shared_ptr<SquirrelDebugger> debugger) {
   HSQUIRRELVM v = sq_open(1024);//creates a VM with initial stack size 1024
   {
-    std::lock_guard<std::mutex> lock(vmsMutex);
+    std::lock_guard lock(vmsMutex);
     vms.push_back({v, debugger});
   }
 
@@ -101,7 +101,7 @@ void run(std::shared_ptr<SquirrelDebugger> debugger) {
   // Enable debugging hooks
   if (debugger) {
     debugger->SetVm(v);
-    debugger->Pause();
+    if (ReturnCode::Success != debugger->Pause()) { cerr << "Failed to pause on startup." << endl; }
     sq_enabledebuginfo(v, SQTrue);
     sq_setnativedebughook(v, &SquirrelNativeDebugHook);
   }
@@ -119,9 +119,7 @@ void run(std::shared_ptr<SquirrelDebugger> debugger) {
   if (SQ_SUCCEEDED(CompileFile(v, filename))) {
     sq_pushroottable(v);
 
-    if (SQ_FAILED(sq_call(v, 1 /* root table */, SQFalse, SQTrue))) {
-      cerr << "Failed to call global method" << endl;
-    }
+    if (SQ_FAILED(sq_call(v, 1 /* root table */, SQFalse, SQTrue))) { cerr << "Failed to call global method" << endl; }
     sq_pop(v, 1);// Pop function
   }
 
@@ -138,7 +136,7 @@ void run(std::shared_ptr<SquirrelDebugger> debugger) {
 }
 
 int main(int argc, char* argv[]) {
-  
+
   EmbeddedServer::InitEnvironment();
 
   std::unique_ptr<EmbeddedServer> ep(EmbeddedServer::Create());

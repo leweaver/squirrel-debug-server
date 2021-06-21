@@ -339,10 +339,10 @@ export class SquidDebugSession extends DebugSession {
     }
 
     protected scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments): void {
-
+        logger.log('scopesRequest frameid=' + args.frameId);
         response.body = {
             scopes: [
-                new Scope("Local", this._variableHandles.create("local"), false),
+                new Scope("Local", this._variableHandles.create("local:" + args.frameId + ':'), false),
                 new Scope("Global", this._variableHandles.create("global"), true)
             ]
         };
@@ -380,7 +380,34 @@ export class SquidDebugSession extends DebugSession {
         } else {
 
             const id = this._variableHandles.get(args.variablesReference);
+            if (id.startsWith('local:')) {
+                const secondPos = id.indexOf(':', 6);
+                const frameId = id.substr(6, secondPos - 6);
+                const path:string = id.substr(secondPos);
+                logger.log(`variablesRequest id=${id} frameId=${frameId} path=${path}`);
 
+                const vars = await this._runtime.getStackLocals(parseInt(frameId), path);
+                for (let v of vars) {
+                    let debugVarInfo = {
+                        name: v.name,
+                        type: v.type,
+                        value: v.value,
+                        variablesReference: 0
+                    } as DebugProtocol.Variable;
+
+                    if (v.type === 'object') {
+                        let subobjectId = id;
+                        if (!id.endsWith(':')) { subobjectId += ','; }
+                        subobjectId += v.name;
+
+                        debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
+                    }
+
+                    variables.push(debugVarInfo);
+                }
+            }
+/*
+            logger.log('variablesRequest id=' + id);
             if (id) {
                 const i = 12345678;
                 variables.push({
@@ -433,6 +460,7 @@ export class SquidDebugSession extends DebugSession {
                 });
                 this._isLongrunning.set(ref, true);
             }
+            */
         }
 
         response.body = {

@@ -6,12 +6,18 @@ import { logger} from 'vscode-debugadapter';
 import { EventEmitter } from 'events';
 import { EventMessage, EventMessageType, Status, Runstate } from './squidDto';
 
-//import encodeUrl = require('encodeurl');
+import encodeUrl = require('encodeurl');
 import got = require('got');
 import WebSocket = require('ws');
 
 export interface FileAccessor {
     readFile(path: string): Promise<string>;
+}
+
+export interface Variable {
+    name: string,
+    value: string;
+    type: string
 }
 
 export interface ISquidBreakpoint {
@@ -82,8 +88,12 @@ export class SquidRuntime extends EventEmitter {
         this._noDebug = noDebug;
 
         this._debuggerHostnamePort = hostnamePort;
-        await this.connectDebugger(this._debuggerHostnamePort).catch(_ => this.emit('end'));
-        logger.log('connected');
+        await this.connectDebugger(this._debuggerHostnamePort)
+            .then(() => {
+                logger.log('connected');
+                this.sendCommand('SendStatus');
+            })
+            .catch(_ => this.emit('end'));
 
         //await this.loadSource(program);
         //this._currentLine = -1;
@@ -104,20 +114,20 @@ export class SquidRuntime extends EventEmitter {
      * Continue execution to the end/beginning.
      */
     public async continue() {
-        await this.sendCommand('continue');
+        await this.sendCommand('Continue');
     }
 
     /**
      * Step to the next/previous non empty line.
      */
     public async stepOut() {
-        await this.sendCommand('step_out');
+        await this.sendCommand('StepOut');
     }
     public async stepOver() {
-        await this.sendCommand('step_over');
+        await this.sendCommand('StepOver');
     }
     public async stepIn() {
-        await this.sendCommand('step_in');
+        await this.sendCommand('StepIn');
     }
 
     /**
@@ -144,6 +154,10 @@ export class SquidRuntime extends EventEmitter {
             frames: frames,
             count: frames.length
         };
+    }
+
+    public async getStackLocals(frame: number, path:string): Promise<Variable[]> {
+        return await this.sendCommand('StackLocals/' + frame + '?path=' + encodeUrl(path));
     }
 
     public getBreakpoints(path: string, line: number): number[] {
@@ -237,7 +251,6 @@ export class SquidRuntime extends EventEmitter {
         return new Promise<void>((resolve, reject) => {
             let ws = new WebSocket(`ws://${hostnamePort}/ws`);
             ws.on('open', function open() {
-                ws.send("send_status");
                 resolve();
             });
             ws.on('message', (msgStr: string) => self.handleWebsocketMessage(msgStr));
@@ -285,7 +298,9 @@ export class SquidRuntime extends EventEmitter {
     }
 
     private async sendCommand(commandName: string) {
-        const {body} = await got.put(`http://${this._debuggerHostnamePort}/DebugCommand/${commandName}`, {
+        let uri = `http://${this._debuggerHostnamePort}/DebugCommand/${commandName}`;
+        logger.log(uri);
+        const {body} = await got.put(uri, {
             json: true
         });
         return body.data;

@@ -1,3 +1,5 @@
+ColumnLimit: 120
+
 # Generated from CLion C/C++ Code Style settings
 BasedOnStyle: LLVM
 AccessModifierOffset: -1
@@ -31,9 +33,8 @@ BraceWrapping:
   SplitEmptyRecord: true
 BreakBeforeBinaryOperators: None
 BreakBeforeTernaryOperators: true
-BreakConstructorInitializers: BeforeColon
+BreakConstructorInitializers: BeforeComma
 BreakInheritanceList: BeforeColon
-ColumnLimit: 0
 CompactNamespaces: false
 ContinuationIndentWidth: 8
 IndentCaseLabels: true
