@@ -63,7 +63,7 @@ class SquirrelDebugger : public sdb::MessageCommandInterface {
   // This must only be accesed within the Squirrel Execution Thread.
   struct SquirrelVmData {
     void PopulateStack(std::vector<sdb::data::StackEntry>& stack) const;
-    void PopulateStackVariables(std::vector<sdb::data::StackEntry>& stack) const;
+    void PopulateStackVariables(int32_t stackFrame, const std::string& path, std::vector<sdb::data::Variable>& stack) const;
 
     int currentStackDepth = 0;
     HSQUIRRELVM vm = nullptr;

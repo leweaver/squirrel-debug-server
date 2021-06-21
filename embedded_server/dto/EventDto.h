@@ -12,28 +12,36 @@
 #include OATPP_CODEGEN_BEGIN(DTO)///< Begin DTO codegen section
 
 namespace sdb::dto {
+// clang-format off
 ENUM(CommandMessageType, v_int32,
-     VALUE(Pause, 0, "pause"),
-     VALUE(Continue, 1, "continue"),
-     VALUE(StepOut, 2, "step_out"),
-     VALUE(StepOver, 3, "step_over"),
-     VALUE(StepIn, 4, "step_in"),
+     VALUE(Pause,      0, "pause"),
+     VALUE(Continue,   1, "continue"),
+     VALUE(StepOut,    2, "step_out"),
+     VALUE(StepOver,   3, "step_over"),
+     VALUE(StepIn,     4, "step_in"),
      VALUE(SendStatus, 5, "send_status"))
 
 ENUM(EventMessageType, v_int32,
-     VALUE(Status, 0, "status"))
+     VALUE(Status,     0, "status"))
 
 ENUM(RunState, v_int32,
-     VALUE(Running, 0, "running"),
-     VALUE(Pausing, 1, "pausing"),
-     VALUE(Paused, 2, "paused"),
-     VALUE(Stepping, 3, "stepping"))
+     VALUE(Running,    0, "running"),
+     VALUE(Pausing,    1, "pausing"),
+     VALUE(Paused,     2, "paused"),
+     VALUE(Stepping,   3, "stepping"))
 
 ENUM(VariableType, v_int32,
-     VALUE(String, 0, "string"),
-     VALUE(Bool, 1, "bool"),
-     VALUE(Integer, 2, "integer"),
-     VALUE(Float, 3, "float"))
+     VALUE(String,     0, "string"),
+     VALUE(Bool,       1, "bool"),
+     VALUE(Integer,    2, "integer"),
+     VALUE(Float,      3, "float"),
+     VALUE(Closure,    4, "closure"),
+     VALUE(Class,      5, "class"),
+     VALUE(Instance,   6, "instance"),
+     VALUE(Array,      7, "array"),
+     VALUE(Table,      8, "table"),
+     VALUE(Other,      9, "other"))
+// clang-format on
 
 template<typename TMessageBody>
 class EventMessageWrapper : public oatpp::DTO {

@@ -351,11 +351,10 @@ export class SquidDebugSession extends DebugSession {
 
     protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request) {
 
-        const variables: DebugProtocol.Variable[] = [];
 
         if (this._isLongrunning.get(args.variablesReference)) {
             // long running
-
+/*
             if (request) {
                 this._cancelationTokens.set(request.seq, false);
             }
@@ -376,96 +375,53 @@ export class SquidDebugSession extends DebugSession {
             if (request) {
                 this._cancelationTokens.delete(request.seq);
             }
-
+*/
         } else {
 
             const id = this._variableHandles.get(args.variablesReference);
             if (id.startsWith('local:')) {
                 const secondPos = id.indexOf(':', 6);
                 const frameId = id.substr(6, secondPos - 6);
-                const path:string = id.substr(secondPos);
+                const path:string = id.substr(secondPos + 1);
                 logger.log(`variablesRequest id=${id} frameId=${frameId} path=${path}`);
 
-                const vars = await this._runtime.getStackLocals(parseInt(frameId), path);
-                for (let v of vars) {
-                    let debugVarInfo = {
-                        name: v.name,
-                        type: v.type,
-                        value: v.value,
-                        variablesReference: 0
-                    } as DebugProtocol.Variable;
+                this._runtime.getStackLocals(parseInt(frameId), path).then((vars) => {
+                    const variables: DebugProtocol.Variable[] = [];
+                    for (let v of vars) {
+                        let debugVarInfo = {
+                            name: v.name,
+                            type: v.type,
+                            value: v.value,
+                            variablesReference: 0
+                        } as DebugProtocol.Variable;
 
-                    if (v.type === 'object') {
-                        let subobjectId = id;
-                        if (!id.endsWith(':')) { subobjectId += ','; }
-                        subobjectId += v.name;
+                        if (v.type === 'object') {
+                            let subobjectId = id;
+                            if (!id.endsWith(':')) { subobjectId += ','; }
+                            subobjectId += v.name;
 
-                        debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
+                            debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
+                        }
+
+                        variables.push(debugVarInfo);
                     }
 
-                    variables.push(debugVarInfo);
-                }
+                    response.body = {
+                        variables: variables
+                    };
+                    this.sendResponse(response);
+                }).catch((reason) => {
+                    logger.error(`variablesRequest failed. reason: ${reason}`);
+                    response.success = false;
+                    response.message = reason;
+                    this.sendResponse(response);
+                });
+                return;
             }
-/*
-            logger.log('variablesRequest id=' + id);
-            if (id) {
-                const i = 12345678;
-                variables.push({
-                    name: id + "_i",
-                    type: "integer",
-                    value: this._showHex ? '0x' + i.toString(16) : i.toString(10),
-                    // eslint-disable-next-line @typescript-eslint/naming-convention
-                    __vscodeVariableMenuContext: "simple",
-                    variablesReference: 0
-                } as DebugProtocol.Variable);
-                variables.push({
-                    name: id + "_f",
-                    type: "float",
-                    value: "3.14",
-                    variablesReference: 0
-                });
-                variables.push({
-                    name: id + "_f",
-                    type: "float",
-                    value: "6.28",
-                    variablesReference: 0
-                });
-                variables.push({
-                    name: id + "_f",
-                    type: "float",
-                    value: "6.28",
-                    variablesReference: 0
-                });
-                variables.push({
-                    name: id + "_s",
-                    type: "string",
-                    value: "hello world",
-                    variablesReference: 0
-                });
-                variables.push({
-                    name: id + "_o",
-                    type: "object",
-                    value: "Object",
-                    variablesReference: this._variableHandles.create(id + "_o")
-                });
-
-                // cancellation support for long running requests
-                const nm = id + "_long_running";
-                const ref = this._variableHandles.create(id + "_lr");
-                variables.push({
-                    name: nm,
-                    type: "object",
-                    value: "Object",
-                    variablesReference: ref
-                });
-                this._isLongrunning.set(ref, true);
-            }
-            */
         }
 
-        response.body = {
-            variables: variables
-        };
+        response.success = false;
+        response.message = "unknown variable scope";
         this.sendResponse(response);
     }
 

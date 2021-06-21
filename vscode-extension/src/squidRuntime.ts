@@ -157,7 +157,8 @@ export class SquidRuntime extends EventEmitter {
     }
 
     public async getStackLocals(frame: number, path:string): Promise<Variable[]> {
-        return await this.sendCommand('StackLocals/' + frame + '?path=' + encodeUrl(path));
+        const dto = await this.sendQuery('StackLocals/' + frame + '?path=' + encodeUrl(path));
+        return dto.variables;
     }
 
     public getBreakpoints(path: string, line: number): number[] {
@@ -304,6 +305,14 @@ export class SquidRuntime extends EventEmitter {
             json: true
         });
         return body.data;
+    }
+    private async sendQuery(commandName: string) {
+        let uri = `http://${this._debuggerHostnamePort}/DebugCommand/${commandName}`;
+        logger.log(uri);
+        const {body} = await got(uri, {
+            json: true
+        });
+        return body;
     }
 
     private updateStatus(status: Status) {

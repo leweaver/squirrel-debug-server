@@ -20,6 +20,7 @@ enum class ReturnCode
   // Invalid means user input to a call caused the call to fail
   Invalid = 100,
   InvalidNotPaused = 101,
+  InvalidParameter = 102,
 
   // Error means something went wrong inside the implementation, not good.
   ErrorInternal = 200
@@ -43,7 +44,13 @@ enum class VariableType {
   String,
   Bool,
   Integer,
-  Float
+  Float,
+  Closure,
+  Class,
+  Instance,
+  Array,
+  Table,
+  Other
 };
 struct Variable {
   std::string name;

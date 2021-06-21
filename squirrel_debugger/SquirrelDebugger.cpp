@@ -3,11 +3,11 @@
 #include <squirrel.h>
 
 #include <array>
+#include <cassert>
 #include <cstdarg>
+#include <mutex>
 #include <sstream>
 #include <unordered_map>
-#include <mutex>
-#include <cassert>
 
 using sdb::SquirrelDebugger;
 using sdb::data::ReturnCode;
@@ -29,24 +29,9 @@ const long long kMaxStackDepth = 100;
 
 const char* GetSqObjTypeName(SQObjectType sqType) {
   static const std::array<const char*, 18> typeNames = {
-          "NULL",
-          "INTEGER",
-          "FLOAT",
-          "BOOL",
-          "STRING",
-          "TABLE",
-          "ARRAY",
-          "USERDATA",
-          "CLOSURE",
-          "NATIVECLOSURE",
-          "GENERATOR",
-          "USERPOINTER",
-          "THREAD",
-          "FUNCPROTO",
-          "CLASS",
-          "INSTANCE",
-          "WEAKREF",
-          "OUTER",
+          "NULL",   "INTEGER",   "FLOAT",   "BOOL",          "STRING",    "TABLE",
+          "ARRAY",  "USERDATA",  "CLOSURE", "NATIVECLOSURE", "GENERATOR", "USERPOINTER",
+          "THREAD", "FUNCPROTO", "CLASS",   "INSTANCE",      "WEAKREF",   "OUTER",
   };
   // Get index of least sig set bit:
 #ifdef _MSC_VER
@@ -59,10 +44,9 @@ const char* GetSqObjTypeName(SQObjectType sqType) {
 
 bool g_allowRecursion = true;
 
-void GetClassesFullNameHelper(HSQUIRRELVM v, const std::string& currentNamespace, std::unordered_map<SQHash, std::string>& classNames) {
-  if (sq_gettype(v, -1) != OT_TABLE) {
-    throw std::runtime_error("Must have a table at the top of the stack.");
-  }
+void GetClassesFullNameHelper(HSQUIRRELVM v, const std::string& currentNamespace,
+                              std::unordered_map<SQHash, std::string>& classNames) {
+  if (sq_gettype(v, -1) != OT_TABLE) { throw std::runtime_error("Must have a table at the top of the stack."); }
 
   sq_pushnull(v);
 
@@ -74,16 +58,12 @@ void GetClassesFullNameHelper(HSQUIRRELVM v, const std::string& currentNamespace
       const ::SQChar* key;
       sq_getstring(v, -2, &key);
       auto newNamespace = currentNamespace;
-      if (!currentNamespace.empty()) {
-        newNamespace.append(".");
-      }
+      if (!currentNamespace.empty()) { newNamespace.append("."); }
       newNamespace.append(key);
 
       if (type == OT_CLASS) {
         const auto classHash = sq_gethash(v, -1);
-        if (classNames.find(classHash) != classNames.end()) {
-          throw std::runtime_error("class already added man");
-        }
+        if (classNames.find(classHash) != classNames.end()) { throw std::runtime_error("class already added man"); }
         classNames[classHash] = newNamespace;
       } else {
         GetClassesFullNameHelper(v, newNamespace, classNames);
@@ -96,7 +76,103 @@ void GetClassesFullNameHelper(HSQUIRRELVM v, const std::string& currentNamespace
 }
 
 std::string GetClassFullName(HSQUIRRELVM v);
+
+VariableType sdb_sq_typeof(HSQUIRRELVM v) {
+  switch (sq_gettype(v, sq_gettop(v))) {
+    case OT_BOOL: 
+      return VariableType::Bool;
+    case OT_INTEGER:
+      return VariableType::Integer;
+    case OT_FLOAT:
+      return VariableType::Float;
+    case OT_STRING:
+      return VariableType::String;
+    case OT_CLOSURE:
+      return VariableType::Closure;
+    case OT_CLASS:
+      return VariableType::Class;
+    case OT_INSTANCE:
+      return VariableType::Instance;
+    case OT_ARRAY:
+      return VariableType::Array;
+    case OT_TABLE:
+      return VariableType::Table;
+    default:
+      return VariableType::Other;
+  }
+}
+
+std::string sdb_sq_toString(HSQUIRRELVM v) {
+  std::stringstream ss;
+  const auto topIdx = sq_gettop(v);
+  switch (const auto type = sq_gettype(v, topIdx); type) {
+    case OT_BOOL: {
+      SQBool val = SQFalse;
+      if (SQ_SUCCEEDED(sq_getbool(v, topIdx, &val))) { ss << (val == SQTrue ? "true" : "false"); }
+      break;
+    }
+    case OT_INTEGER: {
+      SQInteger val = 0;
+      if (SQ_SUCCEEDED(sq_getinteger(v, topIdx, &val))) { ss << val; }
+      break;
+    }
+    case OT_FLOAT: {
+      SQFloat val = 0.0f;
+      if (SQ_SUCCEEDED(sq_getfloat(v, topIdx, &val))) { ss << val; }
+      break;
+    }
+    case OT_STRING: {
+      const ::SQChar* val = nullptr;
+      if (SQ_SUCCEEDED(sq_getstring(v, topIdx, &val))) { ss << val; }
+      break;
+    }
+    case OT_CLOSURE: {
+      if (SQ_SUCCEEDED(sq_getclosurename(v, topIdx))) {
+        const ::SQChar* val = nullptr;
+        if (SQ_SUCCEEDED(sq_getstring(v, topIdx + 1, &val))) {
+          ss << GetSqObjTypeName(type) << (val != nullptr ? val : "(anonymous)");
+
+          // pop name of closure
+          sq_poptop(v);
+          break;
+        }
+      }
+      ss << "Invalid Closure";
+      break;
+    }
+    case OT_CLASS: {
+      ss << GetClassFullName(v);
+      break;
+    }
+    case OT_INSTANCE: {
+      if (SQ_SUCCEEDED(sq_getclass(v, topIdx))) {
+        ss << "Instance of " << sdb_sq_toString(v);
+        sq_poptop(v);
+      } else {
+      }
+      break;
+    }
+    case OT_ARRAY:
+    case OT_TABLE: {
+      const auto arrSize = sq_getsize(v, topIdx);
+
+      //null iterator
+      sq_pushnull(v);
+      ss << GetSqObjTypeName(type);
+      ss << " (len=" << arrSize << ")";
+
+      sq_pop(v, 1);//pops the null iterator
+      break;
+    }
+    default:
+      ss << GetSqObjTypeName(type);
+  }
+
+  return ss.str();
+}
+
 // Pretty prints the var at the top of the stack.
+// Useful for debugging.
 std::string prettyPrint(HSQUIRRELVM v) {
   std::stringstream ss;
   const auto topIdx = sq_gettop(v);
@@ -105,7 +181,7 @@ std::string prettyPrint(HSQUIRRELVM v) {
     case OT_BOOL: {
       SQBool val;
       sq_getbool(v, topIdx, &val);
-      ss << val ? "true" : "false";
+      ss << (val ? "true" : "false");
       break;
     }
     case OT_INTEGER: {
@@ -142,15 +218,12 @@ std::string prettyPrint(HSQUIRRELVM v) {
     }
     case OT_CLASS: {
       ss << GetSqObjTypeName(type) << " ";
-      if (g_allowRecursion)
-        ss << GetClassFullName(v);
+      if (g_allowRecursion) ss << GetClassFullName(v);
       ss << " members: ";
 
       sq_pushnull(v);
       for (SQInteger i = 0; SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
-        if (i > 0) {
-          ss << ", ";
-        }
+        if (i > 0) { ss << ", "; }
 
         //here -1 (aka top) is the value and -2 is the key
 
@@ -180,11 +253,8 @@ std::string prettyPrint(HSQUIRRELVM v) {
       sq_pushnull(v);
       ss << GetSqObjTypeName(type);
       ss << " (len=" << arrSize << ") [";
-      for (SQInteger i = 0; i < printElems && SQ_SUCCEEDED(sq_next(v, -2));
-           ++i) {
-        if (i > 0) {
-          ss << ", ";
-        }
+      for (SQInteger i = 0; i < printElems && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
+        if (i > 0) { ss << ", "; }
 
         //here -1 (aka top) is the value and -2 is the key
 
@@ -195,9 +265,7 @@ std::string prettyPrint(HSQUIRRELVM v) {
 
         ss << keyStr << ":" << valStr;
       }
-      if (arrSize > printElems) {
-        ss << ", ...";
-      }
+      if (arrSize > printElems) { ss << ", ..."; }
       ss << "]";
 
       sq_pop(v, 1);//pops the null iterator
@@ -214,9 +282,7 @@ std::string GetClassFullName(HSQUIRRELVM v) {
   //g_allowRecursion = false;
   // TODO: Gonna need to cache this bad boy. Is this possible?
 
-  if (sq_gettype(v, -1) != OT_CLASS) {
-    throw std::runtime_error("Can't get the name of a class if it isn't a class!");
-  }
+  if (sq_gettype(v, -1) != OT_CLASS) { throw std::runtime_error("Can't get the name of a class if it isn't a class!"); }
 
   auto findClassHash = sq_gethash(v, -1);
   std::unordered_map<SQHash, std::string> classNames;
@@ -239,9 +305,7 @@ std::string GetClassFullName(HSQUIRRELVM v) {
     for (SQUnsignedInteger nseq = 0u;; ++nseq) {
       // Push local with given index to stack
       const auto localName = sq_getlocal(v, idx, nseq);
-      if (localName == nullptr) {
-        break;
-      }
+      if (localName == nullptr) { break; }
 
       const auto valType = sq_gettype(v, -1);
       if (valType == OT_TABLE) {
@@ -269,9 +333,7 @@ void SquirrelDebugger::SetEventInterface(std::shared_ptr<sdb::MessageEventInterf
   eventInterface_ = eventInterface;
 }
 
-void SquirrelDebugger::SetVm(HSQUIRRELVM vm) {
-   vmData_.vm = vm;
-}
+void SquirrelDebugger::SetVm(HSQUIRRELVM vm) { vmData_.vm = vm; }
 
 ReturnCode SquirrelDebugger::Pause() {
   if (pauseRequested_ == PauseType::None) {
@@ -296,35 +358,26 @@ ReturnCode SquirrelDebugger::Continue() {
   return ReturnCode::InvalidNotPaused;
 }
 
-ReturnCode SquirrelDebugger::StepOut() {
-  return Step(PauseType::StepOut, 1);
-}
+ReturnCode SquirrelDebugger::StepOut() { return Step(PauseType::StepOut, 1); }
 
-ReturnCode SquirrelDebugger::StepOver() {
-  return Step(PauseType::StepOver, 0);
-}
-  
-ReturnCode SquirrelDebugger::StepIn() {
-  return Step(PauseType::StepIn, -1);
-}
+ReturnCode SquirrelDebugger::StepOver() { return Step(PauseType::StepOver, 0); }
 
-ReturnCode SquirrelDebugger::GetStackLocals(int32_t stackFrame, const std::string& path, std::vector<Variable>& variables) {
+ReturnCode SquirrelDebugger::StepIn() { return Step(PauseType::StepIn, -1); }
+
+ReturnCode SquirrelDebugger::GetStackLocals(int32_t stackFrame, const std::string& path,
+                                            std::vector<Variable>& variables) {
   std::lock_guard lock(pauseMutex_);
-  if (!pauseMutexData_.isPaused) {
-    return ReturnCode::InvalidNotPaused;
-  }
+  if (!pauseMutexData_.isPaused) { return ReturnCode::InvalidNotPaused; }
 
-  Variable v = {"lewis", VariableType::String, "rocks"};
-  variables.emplace_back(std::move(v));
+  if (stackFrame > vmData_.currentStackDepth) { return ReturnCode::InvalidParameter; }
+  vmData_.PopulateStackVariables(stackFrame, path, variables);
 
   return ReturnCode::Success;
 }
 
 ReturnCode SquirrelDebugger::Step(PauseType pauseType, int returnsRequired) {
   std::lock_guard lock(pauseMutex_);
-  if (!pauseMutexData_.isPaused) {
-    return ReturnCode::InvalidNotPaused;
-  }
+  if (!pauseMutexData_.isPaused) { return ReturnCode::InvalidNotPaused; }
 
   pauseMutexData_.returnsRequired = returnsRequired;
   pauseRequested_ = pauseType;
@@ -357,7 +410,8 @@ ReturnCode SquirrelDebugger::SendStatus() {
   return ReturnCode::Success;
 }
 
-void SquirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname) {
+void SquirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line,
+                                               const SQChar* funcname) {
   // 'c' called when a function has been called
   if (type == 'c') {
     ++vmData_.currentStackDepth;
@@ -365,22 +419,18 @@ void SquirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, co
     if (pauseRequested_ != PauseType::None) {
       std::unique_lock<std::mutex> lock(pauseMutex_);
       if (pauseRequested_ != PauseType::None) {
-        if (pauseMutexData_.returnsRequired >= 0) {
-          ++pauseMutexData_.returnsRequired;
-        }
+        if (pauseMutexData_.returnsRequired >= 0) { ++pauseMutexData_.returnsRequired; }
       }
     }
-  // 'r' called when a function returns
+    // 'r' called when a function returns
   } else if (type == 'r') {
     --vmData_.currentStackDepth;
     assert(vmData_.currentStackDepth >= 0);
     if (pauseRequested_ != PauseType::None) {
       std::unique_lock<std::mutex> lock(pauseMutex_);
-      if (pauseRequested_ != PauseType::None) {
-        --pauseMutexData_.returnsRequired;
-      }
+      if (pauseRequested_ != PauseType::None) { --pauseMutexData_.returnsRequired; }
     }
-  // 'l' called every line(that contains some code)
+    // 'l' called every line(that contains some code)
   } else if (type == 'l') {
     if (pauseRequested_ != PauseType::None && pauseMutexData_.returnsRequired <= 0) {
       std::unique_lock<std::mutex> lock(pauseMutex_);
@@ -402,7 +452,7 @@ void SquirrelDebugger::SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, co
         pauseMutexData_.isPaused = false;
       }
     }
-    
+
     return;
   }
 }
@@ -418,26 +468,21 @@ void SquirrelDebugger::SquirrelVmData::PopulateStack(std::vector<sdb::data::Stac
   }
 }
 
-void SquirrelDebugger::SquirrelVmData::PopulateStackVariables(std::vector<sdb::data::StackEntry>& stack) const {
-  /*
-    SQStackInfos si;
-    auto stackIdx = 0;
-    while (SQ_SUCCEEDED(sq_stackinfos(v, stackIdx, &si))) {
-      std::cout << stackIdx << "\t  " << si.source << ":" << si.line << " " << si.funcname << std::endl;
-      ++stackIdx;
-    }
-    std::cout << "----" << std::endl;
-    for (SQUnsignedInteger nseq = 0u;; ++nseq) {
-      // Push local with given index to stack
-      const auto localName = sq_getlocal(v, 0, nseq);
-      if (localName == nullptr) {
-        break;
-      }
+void SquirrelDebugger::SquirrelVmData::PopulateStackVariables(int32_t stackFrame, const std::string& path,
+                                                              std::vector<Variable>& stack) const {
+  for (SQUnsignedInteger nseq = 0U;; ++nseq) {
+    // Push local with given index to stack
+    const auto* const localName = sq_getlocal(vm, stackFrame, nseq);
+    if (localName == nullptr) { break; }
 
-      std::cout << "  " << localName << " = " << prettyPrint(v) << std::endl;
+    Variable variable;
+    variable.name = localName;
+    variable.type = sdb_sq_typeof(vm);
+    variable.value = sdb_sq_toString(vm);
 
-      // Remove local from stack
-      sq_poptop(v);
-    }
-    */
+    // Remove local from stack
+    sq_poptop(vm);
+
+    stack.emplace_back(std::move(variable));
+  }
 }
