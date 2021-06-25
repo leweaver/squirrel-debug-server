@@ -1,5 +1,6 @@
 #include "include/sdb/SquirrelDebugger.h"
 
+#include <algorithm>
 #include <squirrel.h>
 
 #include <array>
@@ -8,6 +9,8 @@
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
+
+// Quirrel Reference Guide: https://quirrel.io/doc/reference/embedding_squirrel.html
 
 using sdb::SquirrelDebugger;
 using sdb::data::PaginationInfo;
@@ -21,6 +24,9 @@ using sdb::data::VariableType;
 using LockGuard = std::lock_guard<std::recursive_mutex>;
 
 const long long kMaxTablePrettyPrintSize = 5LL;
+const uint32_t kMaxTableSizeToSort = 1000;
+const uint32_t kMaxTableValueStringLength = 20;
+
 const long long pooaxTablePrettyPrintSize = 5LL;
 const long long ARC_BOAT = 5LL;
 const long long ARC_BOAT2 = 5LL;
@@ -110,25 +116,29 @@ std::string sdb_sq_toString(const HSQUIRRELVM v, const SQInteger idx)
 {
   std::stringstream ss;
   switch (sq_gettype(v, idx)) {
-    case OT_BOOL: {
+    case OT_BOOL:
+    {
       SQBool val;
       sq_getbool(v, idx, &val);
       ss << (val ? "true" : "false");
       break;
     }
-    case OT_INTEGER: {
+    case OT_INTEGER:
+    {
       SQInteger val;
       sq_getinteger(v, idx, &val);
       ss << val;
       break;
     }
-    case OT_FLOAT: {
+    case OT_FLOAT:
+    {
       SQFloat val;
       sq_getfloat(v, idx, &val);
       ss << val;
       break;
     }
-    case OT_STRING: {
+    case OT_STRING:
+    {
       const ::SQChar* val;
       sq_getstring(v, idx, &val);
       ss << '"' << val << '"';
@@ -140,72 +150,183 @@ std::string sdb_sq_toString(const HSQUIRRELVM v, const SQInteger idx)
   return ss.str();
 }
 
+// Expects 2 things to be on the stack. -1=value, -2=key.
+// Will pop both from the stack.
+struct WriteTableSummaryFieldHelper {
+  explicit WriteTableSummaryFieldHelper(const HSQUIRRELVM v, const bool isFirst)
+      : vm(v)
+      , isFirst(isFirst)
+  {}
+  const HSQUIRRELVM vm;
+  const bool isFirst;
+};
+std::ostream& operator<<(std::ostream& ss, const WriteTableSummaryFieldHelper& helper)
+{
+  auto* const v = helper.vm;
+  const auto valueStr = sdb_sq_toString(v, -1);
+  if (!valueStr.empty()) {
+    if (!helper.isFirst) { ss << ", "; }
+    sq_poptop(v);// pop val, so we can get the key
+    ss << sdb_sq_toString(v, -1) << ": " << valueStr;
+    sq_poptop(v);// pop key
+  } else {
+    sq_pop(v, 2);
+  }
+
+  return ss;
+}
+
 ReturnCode sdb_sq_readTopVariable(HSQUIRRELVM v, const PaginationInfo& pagination, Variable& variable)
 {
+  const auto createTableChildVariable = [vm = v]() -> Variable {
+    Variable childVar = {};
+    sdb_sq_readTopVariable(vm, {0, 0}, childVar);
+    sq_poptop(vm);// pop val, so we can get the key
+    childVar.name = sdb_sq_toString(vm, -1);
+    sq_poptop(vm);// pop key before next iteration
+
+    return childVar;
+  };
+  const auto createTableChildVariables = [&](std::stringstream& ss) {
+    ss << "{";
+
+    // Table keys are not sorted alphabetically when iterating via sq_next.
+    // If there aren't a large number of keys; get everything and perform a sort.
+    const auto keyCount = sq_getsize(v, -1);
+    variable.childCount = static_cast<uint32_t>(keyCount);
+    if (keyCount < kMaxTableSizeToSort) {
+      using KeyToTableIter = std::pair<std::string, SQInteger>;
+      std::vector<KeyToTableIter> tableKeyToIterator;
+      SQInteger sqIter = 0;
+      sq_pushinteger(v, sqIter);
+      for (SQInteger i = 0; SQ_SUCCEEDED(sq_getinteger(v, -1, &sqIter)) && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
+        sq_poptop(v);// don't need the value.
+        tableKeyToIterator.emplace_back(KeyToTableIter{sdb_sq_toString(v, -1), sqIter});
+        sq_poptop(v);// pop key before next iteration
+      }
+      sq_poptop(v);
+      std::sort(tableKeyToIterator.begin(), tableKeyToIterator.end(),
+                [](const KeyToTableIter& lhs, const KeyToTableIter& rhs) -> bool { return lhs.first < rhs.first; });
+
+      // Render summary of first few elements
+      const auto initialSummarySize = ss.tellp();
+      for (auto iter = tableKeyToIterator.begin();
+           ss.tellp() - initialSummarySize < kMaxTableValueStringLength && iter != tableKeyToIterator.end(); ++iter) {
+        sq_pushinteger(v, iter->second);
+        if (!SQ_SUCCEEDED(sq_next(v, -2))) {
+          sq_poptop(v);// pop iterator
+          break;
+        }
+        ss << WriteTableSummaryFieldHelper(v, ss.tellp() == initialSummarySize);
+        sq_poptop(v);// pop iterator
+      }
+
+      // Now add children
+      auto childKeyIter = tableKeyToIterator.begin() + pagination.beginIndex;
+      for (uint32_t i = 0u; i < pagination.count && childKeyIter != tableKeyToIterator.end(); ++i) {
+        sq_pushinteger(v, childKeyIter->second);
+        ++childKeyIter;
+        if (!SQ_SUCCEEDED(sq_next(v, -2))) {
+          sq_poptop(v);// pop iterator
+          break;
+        }
+        variable.children.emplace_back(createTableChildVariable());
+        sq_poptop(v);// pop iterator
+      }
+    } else {
+      // Render summary of first few elements
+      sq_pushinteger(v, 0);
+      for (SQInteger i = 0; ss.tellp() < kMaxTableValueStringLength && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
+        ss << WriteTableSummaryFieldHelper(v, i == 0);
+      }
+      sq_poptop(v);
+
+      // Now add children
+      sq_pushinteger(v, pagination.beginIndex);
+      for (SQInteger i = 0; i < pagination.count && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
+        variable.children.emplace_back(createTableChildVariable());
+      }
+      // pop iterator
+      sq_poptop(v);
+    }
+
+    ss << "}";
+  };
+
   std::stringstream ss;
   const auto topIdx = sq_gettop(v);
   const auto type = sq_gettype(v, topIdx);
 
+  variable.type = VariableType::Other;
+  variable.childCount = 0;
   switch (type) {
-    case OT_BOOL: {
+    case OT_BOOL:
+    {
       variable.type = VariableType::Bool;
       SQBool val = SQFalse;
       if (SQ_SUCCEEDED(sq_getbool(v, topIdx, &val))) { ss << (val == SQTrue ? "true" : "false"); }
       break;
     }
-    case OT_INTEGER: {
+    case OT_INTEGER:
+    {
       variable.type = VariableType::Integer;
       SQInteger val = 0;
       if (SQ_SUCCEEDED(sq_getinteger(v, topIdx, &val))) { ss << val; }
       break;
     }
-    case OT_FLOAT: {
+    case OT_FLOAT:
+    {
       variable.type = VariableType::Float;
       SQFloat val = 0.0f;
       if (SQ_SUCCEEDED(sq_getfloat(v, topIdx, &val))) { ss << val; }
       break;
     }
-    case OT_STRING: {
+    case OT_STRING:
+    {
       variable.type = VariableType::String;
       const ::SQChar* val = nullptr;
       if (SQ_SUCCEEDED(sq_getstring(v, topIdx, &val))) { ss << val; }
       break;
     }
-    case OT_CLOSURE: {
+    case OT_CLOSURE:
+    {
       variable.type = VariableType::Closure;
-      if (SQ_SUCCEEDED(sq_getclosurename(v, topIdx))) {
+      if (SQ_SUCCEEDED(sq_getclosurename(v, -1))) {
         const ::SQChar* val = nullptr;
-        if (SQ_SUCCEEDED(sq_getstring(v, topIdx + 1, &val))) {
-          ss << GetSqObjTypeName(type) << (val != nullptr ? val : "(anonymous)");
+        if (SQ_SUCCEEDED(sq_getstring(v, -1, &val))) {
+          ss << (val != nullptr ? val : "(anonymous)");
 
           // pop name of closure
           sq_poptop(v);
-          break;
         }
+      } else {
+        ss << "Invalid Closure";
       }
-      ss << "Invalid Closure";
+
+      SQInteger nparams;
+      SQInteger nfreevars;
+      if (SQ_SUCCEEDED(sq_getclosureinfo(v, -1, &nparams, &nfreevars))) {
+        ss << "(";
+        ss << nparams << " params, " << nfreevars << " freevars";
+        ss << ")";
+      }
       break;
     }
-    case OT_CLASS: {
+    case OT_CLASS:
+    {
       variable.type = VariableType::Class;
       ss << GetClassFullName(v);
       break;
     }
-    case OT_INSTANCE: {
-      variable.type = VariableType::Instance;
-      if (SQ_SUCCEEDED(sq_getclass(v, topIdx))) {
-        ss << GetClassFullName(v) << "{}";
-        sq_poptop(v);
-      } else {
-        // TODO
-      }
-      break;
-    }
-    case OT_ARRAY: {
+    case OT_ARRAY:
+    {
       variable.type = VariableType::Array;
       const auto arrSize = sq_getsize(v, topIdx);
+      variable.childCount = static_cast<uint32_t>(arrSize);
+
+      // Add a suffix to the summary
       ss << "{ size=" << arrSize << " }";
-      
+
       // Now add children
       sq_pushinteger(v, pagination.beginIndex);
       for (SQInteger i = 0; i < pagination.count && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
@@ -213,7 +334,7 @@ ReturnCode sdb_sq_readTopVariable(HSQUIRRELVM v, const PaginationInfo& paginatio
         std::stringstream childName;
         childName << i;
         childVar.name = childName.str();
-        
+
         sdb_sq_readTopVariable(v, {0, 0}, childVar);
 
         sq_poptop(v);// pop val, so we can get the key
@@ -224,48 +345,21 @@ ReturnCode sdb_sq_readTopVariable(HSQUIRRELVM v, const PaginationInfo& paginatio
       }
       sq_poptop(v);
     } break;
-    case OT_TABLE: {
+    case OT_INSTANCE:
+    {
+      variable.type = VariableType::Instance;
+      if (SQ_SUCCEEDED(sq_getclass(v, topIdx))) {
+        ss << GetClassFullName(v) << " ";
+        sq_poptop(v);// pop class
+      }
+      createTableChildVariables(ss);
+    } break;
+    case OT_TABLE:
+    {
       variable.type = VariableType::Table;
-      ss << "{";
-
-      // Print out the first few elements
-      sq_pushinteger(v, 0);
-      for (SQInteger i = 0; ss.tellp() < 20 && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
-        const auto valueStr = sdb_sq_toString(v, -1);
-        if (!valueStr.empty()) {
-          if (i != 0) { ss << ", "; }
-          sq_poptop(v);// pop val, so we can get the key
-          ss << sdb_sq_toString(v, -1) << ": " << valueStr;
-          sq_poptop(v);// pop key before next iteration
-        } else {
-          sq_pop(v, 2);
-        }
-      }
-      sq_poptop(v);
-
-      // Now add children
-      sq_pushinteger(v, pagination.beginIndex);
-      for (SQInteger i = 0; i < pagination.count && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
-        Variable childVar = {};
-        std::stringstream childName;
-        childName << i;
-        childVar.name = childName.str();
-
-        sdb_sq_readTopVariable(v, {0, 0}, childVar);
-
-        sq_poptop(v);// pop val, so we can get the key
-        childVar.name = sdb_sq_toString(v, -1);
-        sq_poptop(v);// pop key before next iteration
-
-        variable.children.emplace_back(std::move(childVar));
-      }
-        // pop iterator
-      sq_poptop(v);
-
-      ss << "}";
+      createTableChildVariables(ss);
     } break;
     default:
-      variable.type = VariableType::Other;
       ss << GetSqObjTypeName(type);
   }
 
@@ -285,7 +379,8 @@ ReturnCode sdb_sq_readVariable(HSQUIRRELVM v, std::vector<std::string>::const_it
 
   // Push the indexed child on to the stack
   switch (type) {
-    case OT_ARRAY: {
+    case OT_ARRAY:
+    {
       const auto arrSize = sq_getsize(v, topIdx);
       std::stringstream indexStr(*pathBegin);
       int arrIndex = 0;
@@ -307,7 +402,10 @@ ReturnCode sdb_sq_readVariable(HSQUIRRELVM v, std::vector<std::string>::const_it
       }
 
     } break;
-    case OT_TABLE: {
+    case OT_TABLE:
+    case OT_INSTANCE:
+    case OT_CLOSURE:
+    {
       const auto& key = *pathBegin;
       sq_pushstring(v, key.c_str(), key.size());
       if (!SQ_SUCCEEDED(sq_get(v, -2))) {
@@ -362,31 +460,36 @@ std::string prettyPrint(HSQUIRRELVM v)
   const auto topIdx = sq_gettop(v);
   const auto type = sq_gettype(v, topIdx);
   switch (type) {
-    case OT_BOOL: {
+    case OT_BOOL:
+    {
       SQBool val;
       sq_getbool(v, topIdx, &val);
       ss << (val ? "true" : "false");
       break;
     }
-    case OT_INTEGER: {
+    case OT_INTEGER:
+    {
       SQInteger val;
       sq_getinteger(v, topIdx, &val);
       ss << val;
       break;
     }
-    case OT_FLOAT: {
+    case OT_FLOAT:
+    {
       SQFloat val;
       sq_getfloat(v, topIdx, &val);
       ss << val;
       break;
     }
-    case OT_STRING: {
+    case OT_STRING:
+    {
       const ::SQChar* val;
       sq_getstring(v, topIdx, &val);
       ss << '"' << val << '"';
       break;
     }
-    case OT_CLOSURE: {
+    case OT_CLOSURE:
+    {
       if (SQ_SUCCEEDED(sq_getclosurename(v, topIdx))) {
         const ::SQChar* val;
         if (SQ_SUCCEEDED(sq_getstring(v, topIdx + 1, &val))) {
@@ -400,7 +503,8 @@ std::string prettyPrint(HSQUIRRELVM v)
       ss << "Invalid Closure";
       break;
     }
-    case OT_CLASS: {
+    case OT_CLASS:
+    {
       ss << GetSqObjTypeName(type) << " ";
       if (g_allowRecursion) ss << GetClassFullName(v);
       ss << " members: ";
@@ -420,7 +524,8 @@ std::string prettyPrint(HSQUIRRELVM v)
       sq_pop(v, 1);//pops the null iterator
       break;
     }
-    case OT_INSTANCE: {
+    case OT_INSTANCE:
+    {
       if (SQ_SUCCEEDED(sq_getclass(v, topIdx))) {
         ss << "Instance of " << prettyPrint(v);
         sq_poptop(v);
@@ -429,7 +534,8 @@ std::string prettyPrint(HSQUIRRELVM v)
       break;
     }
     case OT_ARRAY:
-    case OT_TABLE: {
+    case OT_TABLE:
+    {
       const auto arrSize = sq_getsize(v, topIdx);
       const auto printElems = std::min(kMaxTablePrettyPrintSize, arrSize);
 
@@ -677,8 +783,9 @@ ReturnCode SquirrelDebugger::SquirrelVmData::PopulateStackVariables(int32_t stac
   }
 
   ReturnCode rc = ReturnCode::Success;
+  const auto maxNSeq = pagination.beginIndex + pagination.count;
   if (pathParts.begin() == pathParts.end()) {
-    for (SQUnsignedInteger nSeq = 0; ; ++nSeq) {
+    for (SQUnsignedInteger nSeq = pagination.beginIndex; nSeq < maxNSeq; ++nSeq) {
       // Push local with given index to stack
       const auto* const localName = sq_getlocal(vm, stackFrame, nSeq);
       if (localName == nullptr) { break; }
@@ -694,7 +801,6 @@ ReturnCode SquirrelDebugger::SquirrelVmData::PopulateStackVariables(int32_t stac
       stack.emplace_back(std::move(variable));
     }
   } else {
-    const auto maxNSeq = pagination.beginIndex + pagination.count;
     for (SQUnsignedInteger nSeq = pagination.beginIndex; nSeq < maxNSeq; ++nSeq) {
       // Push local with given index to stack
       const auto* const localName = sq_getlocal(vm, stackFrame, nSeq);

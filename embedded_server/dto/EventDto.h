@@ -57,6 +57,13 @@ class CommandMessageResponse : public oatpp::DTO {
   DTO_FIELD(Int32, code);
 };
 
+class PaginationInfo : public oatpp::DTO {
+  DTO_INIT(PaginationInfo, DTO)
+
+  DTO_FIELD(Int32, beginIndex);
+  DTO_FIELD(Int32, count);
+};
+
 class Variable : public oatpp::DTO {
   DTO_INIT(Variable, DTO)
 
@@ -64,6 +71,7 @@ class Variable : public oatpp::DTO {
   DTO_FIELD(Enum<VariableType>, type);
   DTO_FIELD(String, value);
   DTO_FIELD(List<Object<Variable>>, children);
+  DTO_FIELD(Int32, childCount);
 };
 
 class VariableList : public oatpp::DTO {

@@ -44,6 +44,10 @@ FakeNamespace.Utils.SuperClass <- class  {
     }
 }
 
+local c = function(a, b, c) {
+  return 1; 
+}
+
 local myexp = @(a,b) a + b
 local mytable = {
     a=10

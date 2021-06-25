@@ -40,6 +40,7 @@ struct Variable {
   VariableType type;
   std::string value;
   std::vector<Variable> children;
+  uint32_t childCount;
 };
 struct PaginationInfo {
   uint32_t beginIndex;
