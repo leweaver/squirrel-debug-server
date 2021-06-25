@@ -24,21 +24,18 @@ class SquirrelDebugger : public sdb::MessageCommandInterface {
   [[nodiscard]] data::ReturnCode StepOver() override;
   [[nodiscard]] data::ReturnCode StepIn() override;
   [[nodiscard]] data::ReturnCode SendStatus() override;
-  [[nodiscard]] data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path, std::vector<data::Variable>& variables) override;
+  [[nodiscard]] data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path,
+                                                const data::PaginationInfo& pagination,
+                                                std::vector<data::Variable>& variables) override;
 
   // The following methods are called from the scripting engine thread
   void SetEventInterface(std::shared_ptr<sdb::MessageEventInterface> eventInterface);
   void SetVm(HSQUIRRELVM vm);
-  void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname);
+  void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line,
+                               const SQChar* funcname);
 
  private:
-  enum class PauseType : uint8_t {
-    None,
-    StepOut,
-    StepOver,
-    StepIn,
-    Pause = StepIn
-  };
+  enum class PauseType : uint8_t { None, StepOut, StepOver, StepIn, Pause = StepIn };
   [[nodiscard]] data::ReturnCode Step(PauseType pauseType, int returnsRequired);
 
   std::shared_ptr<sdb::MessageEventInterface> eventInterface_;
@@ -63,7 +60,9 @@ class SquirrelDebugger : public sdb::MessageCommandInterface {
   // This must only be accesed within the Squirrel Execution Thread.
   struct SquirrelVmData {
     void PopulateStack(std::vector<sdb::data::StackEntry>& stack) const;
-    void PopulateStackVariables(int32_t stackFrame, const std::string& path, std::vector<sdb::data::Variable>& stack) const;
+    data::ReturnCode PopulateStackVariables(int32_t stackFrame, const std::string& path,
+                                            const data::PaginationInfo& pagination,
+                                            std::vector<sdb::data::Variable>& stack) const;
 
     int currentStackDepth = 0;
     HSQUIRRELVM vm = nullptr;

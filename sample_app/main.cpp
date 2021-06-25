@@ -101,7 +101,7 @@ void run(std::shared_ptr<SquirrelDebugger> debugger) {
   // Enable debugging hooks
   if (debugger) {
     debugger->SetVm(v);
-    if (ReturnCode::Success != debugger->Pause()) { cerr << "Failed to pause on startup." << endl; }
+    //if (ReturnCode::Success != debugger->Pause()) { cerr << "Failed to pause on startup." << endl; }
     sq_enabledebuginfo(v, SQTrue);
     sq_setnativedebughook(v, &SquirrelNativeDebugHook);
   }

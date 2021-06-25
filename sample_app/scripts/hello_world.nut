@@ -49,5 +49,8 @@ local mytable = {
     a=10
     b=function(a) { return a+1; }
     c=[9,8,7,6,5,4,3,2,1]
+    d="cat"
+    e="longstring"
+    f=1
 }
 local testy = FakeNamespace.Utils.SuperClass("asdf", 123, myexp, ["I'm a string", [1,2,3,4,5,6,7,8]], mytable, BaseVector)

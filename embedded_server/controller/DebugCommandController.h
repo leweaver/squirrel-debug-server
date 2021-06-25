@@ -60,20 +60,14 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
 
   ENDPOINT("GET", "StackLocals/{stackFrame}", stackLocals, PATH(Int32, stackFrame), QUERY(String, path)) {
     std::vector<data::Variable> variables;
-    const auto ret = messageCommandInterface_->GetStackLocals(stackFrame, path->std_str(), variables);
+
+    data::PaginationInfo pagination = {0, 100};
+
+    const auto ret = messageCommandInterface_->GetStackLocals(stackFrame, path->std_str(), pagination, variables);
     if (ret != data::ReturnCode::Success) { return createReturnCodeResponse(ret); }
 
     const auto varListDto = dto::VariableList::createShared();
-    varListDto->variables = List<Object<dto::Variable>>::createShared();
-    auto& variablesDto = *varListDto->variables.get();
-
-    for (const auto& [name, type, value] : variables) {
-      auto variableDto = dto::Variable::createShared();
-      variableDto->name = String(name.c_str(), static_cast<v_buff_size>(name.size()), false);
-      variableDto->type = static_cast<dto::VariableType>(type);
-      variableDto->value = String(value.c_str(), static_cast<v_buff_size>(value.size()), false);
-      variablesDto.emplace_back(std::move(variableDto));
-    }
+    varListDto->variables = createVariablesList(variables);
     return createDtoResponse(Status::CODE_200, varListDto);
   }
   ENDPOINT_INFO(stackLocals) {
@@ -89,6 +83,20 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   static void addCommandMessageErrorResponses(const std::shared_ptr<Endpoint::Info>& info) {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_400, "application/json");
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_500, "application/json");
+  }
+
+  List<Object<dto::Variable>> createVariablesList(const std::vector<data::Variable>& variables) const
+  {
+    auto variablesDto = List<Object<dto::Variable>>::createShared();
+    for (const auto& [name, type, value, children] : variables) {
+      auto variableDto = dto::Variable::createShared();
+      variableDto->name = String(name.c_str(), static_cast<v_buff_size>(name.size()), false);
+      variableDto->type = static_cast<dto::VariableType>(type);
+      variableDto->value = String(value.c_str(), static_cast<v_buff_size>(value.size()), false);
+      if (!children.empty()) { variableDto->children = createVariablesList(children); }
+      variablesDto->emplace_back(std::move(variableDto));
+    }
+    return variablesDto;
   }
 
   std::shared_ptr<OutgoingResponse> createCommandOkResponse() const {

@@ -12,8 +12,7 @@
 
 namespace sdb {
 namespace data {
-enum class ReturnCode
-{
+enum class ReturnCode {
   // Everything was all good
   Success = 0,
 
@@ -25,12 +24,7 @@ enum class ReturnCode
   // Error means something went wrong inside the implementation, not good.
   ErrorInternal = 200
 };
-enum class Runstate {
-  Running = 0,
-  Pausing = 1,
-  Paused = 2,
-  Stepping = 3
-};
+enum class Runstate { Running = 0, Pausing = 1, Paused = 2, Stepping = 3 };
 struct StackEntry {
   std::string file;
   int64_t line;
@@ -40,22 +34,16 @@ struct Status {
   Runstate runstate;
   std::vector<StackEntry> stack;
 };
-enum class VariableType {
-  String,
-  Bool,
-  Integer,
-  Float,
-  Closure,
-  Class,
-  Instance,
-  Array,
-  Table,
-  Other
-};
+enum class VariableType { String, Bool, Integer, Float, Closure, Class, Instance, Array, Table, Other };
 struct Variable {
   std::string name;
   VariableType type;
   std::string value;
+  std::vector<Variable> children;
+};
+struct PaginationInfo {
+  uint32_t beginIndex;
+  uint32_t count;
 };
 }// namespace data
 
@@ -95,7 +83,9 @@ class MessageCommandInterface {
   /// </summary>
   [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path, std::vector<data::Variable>& variables) = 0;
+  [[nodiscard]] virtual data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path,
+                                                        const data::PaginationInfo& pagination,
+                                                        std::vector<data::Variable>& variables) = 0;
 };
 
 /// <summary>
