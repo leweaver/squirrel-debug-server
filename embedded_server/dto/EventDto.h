@@ -70,7 +70,6 @@ class Variable : public oatpp::DTO {
   DTO_FIELD(String, name);
   DTO_FIELD(Enum<VariableType>, type);
   DTO_FIELD(String, value);
-  DTO_FIELD(List<Object<Variable>>, children);
   DTO_FIELD(Int32, childCount);
 };
 

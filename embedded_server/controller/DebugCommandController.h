@@ -127,12 +127,12 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   List<Object<dto::Variable>> createVariablesList(const std::vector<data::Variable>& variables) const
   {
     auto variablesDto = List<Object<dto::Variable>>::createShared();
-    for (const auto& [name, type, value, children, childCount] : variables) {
+    for (const auto& [name, type, value, childCount] : variables) {
       auto variableDto = dto::Variable::createShared();
       variableDto->name = String(name.c_str(), static_cast<v_buff_size>(name.size()), false);
       variableDto->type = static_cast<dto::VariableType>(type);
       variableDto->value = String(value.c_str(), static_cast<v_buff_size>(value.size()), false);
-      if (!children.empty()) { variableDto->children = createVariablesList(children); }
+      //if (!children.empty()) { variableDto->children = createVariablesList(children); }
       variableDto->childCount = childCount;
       variablesDto->emplace_back(std::move(variableDto));
     }

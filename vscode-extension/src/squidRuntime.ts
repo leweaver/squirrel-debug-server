@@ -17,7 +17,8 @@ export interface FileAccessor {
 export interface Variable {
     name: string,
     value: string;
-    type: string
+    type: string;
+    childCount: number;
 }
 
 export interface ISquidBreakpoint {

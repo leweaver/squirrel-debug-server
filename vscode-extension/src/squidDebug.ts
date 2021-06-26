@@ -395,9 +395,9 @@ export class SquidDebugSession extends DebugSession {
                             variablesReference: 0
                         } as DebugProtocol.Variable;
 
-                        if (v.type === 'object') {
+                        if (v.childCount > 0) {
                             let subobjectId = id;
-                            if (!id.endsWith(':')) { subobjectId += ','; }
+                            if (!id.endsWith(':')) { subobjectId += '.'; }
                             subobjectId += v.name;
 
                             debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
