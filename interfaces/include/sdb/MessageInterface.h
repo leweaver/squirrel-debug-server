@@ -34,15 +34,18 @@ struct Status {
   Runstate runstate;
   std::vector<StackEntry> stack;
 };
-enum class VariableType { String, Bool, Integer, Float, Closure, Class, Instance, Array, Table, Other };
+enum class VariableType { String, Bool, Integer, Float, Closure, Class, Instance, Array, Table, Other, Null };
 struct Variable {
-  std::string name;
-  VariableType type;
+  uint64_t pathIterator = 0;
+  std::string pathUiString;
+  VariableType pathTableKeyType = VariableType::Null;
+  VariableType valueType = VariableType::Null;
   std::string value;
-  uint32_t childCount;
+  uint64_t valueRawAddress = 0;
+  uint32_t childCount = 0;
 };
 struct PaginationInfo {
-  uint32_t beginIndex;
+  uint32_t beginIterator;
   uint32_t count;
 };
 }// namespace data

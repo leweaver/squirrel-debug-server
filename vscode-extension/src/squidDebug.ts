@@ -12,6 +12,7 @@ import {
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { basename } from 'path';
 import { SquidRuntime, ISquidBreakpoint, FileAccessor } from './squidRuntime';
+import { VariableType } from './squidDto';
 import { Subject } from 'await-notify';
 
 function timeout(ms: number) {
@@ -389,16 +390,16 @@ export class SquidDebugSession extends DebugSession {
                     const variables: DebugProtocol.Variable[] = [];
                     for (let v of vars) {
                         let debugVarInfo = {
-                            name: v.name,
-                            type: v.type,
+                            name: v.pathUiString,
+                            type: VariableType[v.valueType],
                             value: v.value,
                             variablesReference: 0
                         } as DebugProtocol.Variable;
 
                         if (v.childCount > 0) {
                             let subobjectId = id;
-                            if (!id.endsWith(':')) { subobjectId += '.'; }
-                            subobjectId += v.name;
+                            if (!id.endsWith(':')) { subobjectId += ','; }
+                            subobjectId += v.pathIterator;
 
                             debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
                         }

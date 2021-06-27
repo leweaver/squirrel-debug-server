@@ -4,7 +4,7 @@
 
 import { logger} from 'vscode-debugadapter';
 import { EventEmitter } from 'events';
-import { EventMessage, EventMessageType, Status, Runstate } from './squidDto';
+import { EventMessage, EventMessageType, Status, Runstate, Variable } from './squidDto';
 
 import encodeUrl = require('encodeurl');
 import got = require('got');
@@ -12,13 +12,6 @@ import WebSocket = require('ws');
 
 export interface FileAccessor {
     readFile(path: string): Promise<string>;
-}
-
-export interface Variable {
-    name: string,
-    value: string;
-    type: string;
-    childCount: number;
 }
 
 export interface ISquidBreakpoint {
@@ -159,7 +152,7 @@ export class SquidRuntime extends EventEmitter {
 
     public async getStackLocals(frame: number, path:string): Promise<Variable[]> {
         const dto = await this.sendQuery('StackLocals/' + frame + '?path=' + encodeUrl(path));
-        return dto.variables;
+        return dto.variables.map((instanceData: any) => new Variable(instanceData));
     }
 
     public getBreakpoints(path: string, line: number): number[] {

@@ -48,13 +48,17 @@ local c = function(a, b, c) {
   return 1; 
 }
 
-local myexp = @(a,b) a + b
+local lambdaExp = @(a,b) a + b
+local strExp = "string expr"
 local mytable = {
-    a=10
-    b=function(a) { return a+1; }
-    c=[9,8,7,6,5,4,3,2,1]
-    d="cat"
-    e="longstring"
-    f=1
+    ["apple pie"]="A1",
+    [strExp]=["one","two","three"],
+    [lambdaExp]=["mary","had","a","little","lamb"],
+    a=10,
+    b=function(a) { return a+1; },
+    c=[9,8,7,6,5,4,3,2,1],
+    d="cat",
+    e="longstring",
+    f=9
 }
-local testy = FakeNamespace.Utils.SuperClass("asdf", 123, myexp, ["I'm a string", [1,2,3,4,5,6,7,8]], mytable, BaseVector)
+local testy = FakeNamespace.Utils.SuperClass("asdf", 123, lambdaExp, ["I'm a string", [1,2,3,4,5,6,7,8]], mytable, BaseVector)

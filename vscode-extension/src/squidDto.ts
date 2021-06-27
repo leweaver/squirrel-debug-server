@@ -47,3 +47,35 @@ export class Status {
         }
     }
 }
+
+export enum  VariableType { string, bool, integer, float, closure, class, instance, array, table, other, null };
+
+export class Variable {
+    public pathIterator: number;
+    public pathUiString: string;
+    public pathTableKeyType: VariableType;
+    public valueType: VariableType;
+    public value: string;
+    public valueRawAddress: number;
+    public childCount: number;
+
+    constructor(instanceData?: any) {
+        if (instanceData) {
+            this.pathIterator = instanceData.pathIterator;
+            this.pathUiString = instanceData.pathUiString;
+            this.pathTableKeyType = VariableType[instanceData.pathTableKeyType as keyof typeof VariableType];
+            this.valueType = VariableType[instanceData.valueType as keyof typeof VariableType];
+            this.value = instanceData.value;
+            this.valueRawAddress = instanceData.valueRawAddress;
+            this.childCount = instanceData.childCount;
+        } else {
+            this.pathIterator = 0;
+            this.pathUiString = "";
+            this.pathTableKeyType = VariableType.null;
+            this.valueType = VariableType.null;
+            this.value = "";
+            this.valueRawAddress = 0;
+            this.childCount = 0;
+        }
+    }
+}

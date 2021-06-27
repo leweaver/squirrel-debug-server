@@ -71,7 +71,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     std::vector<data::Variable> variables;
 
     data::PaginationInfo pagination = {};
-    const bool validParams = parseQueryParamWithDefault(queryParams, "beginIndex", 0U, pagination.beginIndex) &&
+    const bool validParams = parseQueryParamWithDefault(queryParams, "beginIterator", 0U, pagination.beginIterator) &&
                              parseQueryParamWithDefault(queryParams, "count", 100U, pagination.count) &&
                              pagination.count <= 1000U;
     if (!validParams) { return createReturnCodeResponse(data::ReturnCode::InvalidParameter); }
@@ -87,9 +87,9 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   {
     info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
 
-    auto& beginIndexParam = info->queryParams.add<UInt32>("beginIndex");
-    beginIndexParam.required = false;
-    beginIndexParam.description = "Start index for pagination (zero based).";
+    auto& beginIteratorParam = info->queryParams.add<UInt32>("beginIterator");
+    beginIteratorParam.required = false;
+    beginIteratorParam.description = "Start at given pathIterator for pagination. Provide 0 to start at the beginning.";
 
     auto& countParam = info->queryParams.add<UInt32>("count");
     countParam.required = false;
@@ -127,13 +127,17 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   List<Object<dto::Variable>> createVariablesList(const std::vector<data::Variable>& variables) const
   {
     auto variablesDto = List<Object<dto::Variable>>::createShared();
-    for (const auto& [name, type, value, childCount] : variables) {
+    for (const auto& variable : variables) {
       auto variableDto = dto::Variable::createShared();
-      variableDto->name = String(name.c_str(), static_cast<v_buff_size>(name.size()), false);
-      variableDto->type = static_cast<dto::VariableType>(type);
-      variableDto->value = String(value.c_str(), static_cast<v_buff_size>(value.size()), false);
-      //if (!children.empty()) { variableDto->children = createVariablesList(children); }
-      variableDto->childCount = childCount;
+      variableDto->pathIterator = variable.pathIterator;
+      variableDto->pathUiString =
+              String(variable.pathUiString.c_str(), static_cast<v_buff_size>(variable.pathUiString.size()), false);
+      variableDto->pathTableKeyType = static_cast<dto::VariableType>(variable.pathTableKeyType);
+      variableDto->valueType = static_cast<dto::VariableType>(variable.valueType);
+      variableDto->value = String(variable.value.c_str(), static_cast<v_buff_size>(variable.value.size()), false);
+      variableDto->valueRawAddress = variable.valueRawAddress;
+      variableDto->childCount = variable.childCount;
+
       variablesDto->emplace_back(std::move(variableDto));
     }
     return variablesDto;

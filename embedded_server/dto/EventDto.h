@@ -40,7 +40,8 @@ ENUM(VariableType, v_int32,
      VALUE(Instance,   6, "instance"),
      VALUE(Array,      7, "array"),
      VALUE(Table,      8, "table"),
-     VALUE(Other,      9, "other"))
+     VALUE(Other,      9, "other"),
+     VALUE(Null,      10, "null"))
 // clang-format on
 
 template<typename TMessageBody>
@@ -67,10 +68,13 @@ class PaginationInfo : public oatpp::DTO {
 class Variable : public oatpp::DTO {
   DTO_INIT(Variable, DTO)
 
-  DTO_FIELD(String, name);
-  DTO_FIELD(Enum<VariableType>, type);
+  DTO_FIELD(UInt64, pathIterator);
+  DTO_FIELD(String, pathUiString);
+  DTO_FIELD(Enum<VariableType>, pathTableKeyType);
+  DTO_FIELD(Enum<VariableType>, valueType);
   DTO_FIELD(String, value);
-  DTO_FIELD(Int32, childCount);
+  DTO_FIELD(UInt64, valueRawAddress);
+  DTO_FIELD(UInt32, childCount);
 };
 
 class VariableList : public oatpp::DTO {

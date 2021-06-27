@@ -57,7 +57,7 @@ class SquirrelDebugger : public sdb::MessageCommandInterface {
   std::mutex pauseMutex_;
   std::condition_variable pauseCv_;
 
-  // This must only be accesed within the Squirrel Execution Thread.
+  // This must only be accessed within the Squirrel Execution Thread.
   struct SquirrelVmData {
     void PopulateStack(std::vector<sdb::data::StackEntry>& stack) const;
     data::ReturnCode PopulateStackVariables(int32_t stackFrame, const std::string& path,
