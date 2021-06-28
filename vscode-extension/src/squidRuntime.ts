@@ -150,8 +150,13 @@ export class SquidRuntime extends EventEmitter {
         };
     }
 
-    public async getStackLocals(frame: number, path:string): Promise<Variable[]> {
-        const dto = await this.sendQuery('StackLocals/' + frame + '?path=' + encodeUrl(path));
+    public async getLocalVariables(stackFrame: number, path:string): Promise<Variable[]> {
+        const dto = await this.sendQuery('Variables/Local/' + stackFrame + '?path=' + encodeUrl(path));
+        return dto.variables.map((instanceData: any) => new Variable(instanceData));
+    }
+
+    public async getGlobalVariables(path:string): Promise<Variable[]> {
+        const dto = await this.sendQuery('Variables/Global?path=' + encodeUrl(path));
         return dto.variables.map((instanceData: any) => new Variable(instanceData));
     }
 

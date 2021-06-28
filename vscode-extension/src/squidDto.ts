@@ -58,6 +58,7 @@ export class Variable {
     public value: string;
     public valueRawAddress: number;
     public childCount: number;
+    public instanceClassName: string;
 
     constructor(instanceData?: any) {
         if (instanceData) {
@@ -68,6 +69,7 @@ export class Variable {
             this.value = instanceData.value;
             this.valueRawAddress = instanceData.valueRawAddress;
             this.childCount = instanceData.childCount;
+            this.instanceClassName = instanceData.instanceClassName;
         } else {
             this.pathIterator = 0;
             this.pathUiString = "";
@@ -76,6 +78,7 @@ export class Variable {
             this.value = "";
             this.valueRawAddress = 0;
             this.childCount = 0;
+            this.instanceClassName = "";
         }
     }
 }

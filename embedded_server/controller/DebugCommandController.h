@@ -23,6 +23,8 @@
 
 namespace sdb {
 class DebugCommandController final : public oatpp::web::server::api::ApiController {
+  using VariablesCallback = std::function<std::tuple<data::ReturnCode, std::vector<data::Variable>>(
+          const data::PaginationInfo& pagination)>;
  public:
   DebugCommandController(std::shared_ptr<MessageCommandInterface> messageCommandInterface,
                          const std::shared_ptr<ObjectMapper>& objectMapper)
@@ -65,36 +67,35 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   ENDPOINT("PUT", "Continue", cont) { return createReturnCodeResponse(messageCommandInterface_->Continue()); }
   ENDPOINT_INFO(cont) { info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json"); }
 
-  ENDPOINT("GET", "StackLocals/{stackFrame}", stackLocals, PATH(Int32, stackFrame), QUERY(String, path),
+  ENDPOINT("GET", "Variables/Local/{stackFrame}", stackLocals, PATH(Int32, stackFrame), QUERY(String, path),
            QUERIES(QueryParams, queryParams))
   {
-    std::vector<data::Variable> variables;
-
-    data::PaginationInfo pagination = {};
-    const bool validParams = parseQueryParamWithDefault(queryParams, "beginIterator", 0U, pagination.beginIterator) &&
-                             parseQueryParamWithDefault(queryParams, "count", 100U, pagination.count) &&
-                             pagination.count <= 1000U;
-    if (!validParams) { return createReturnCodeResponse(data::ReturnCode::InvalidParameter); }
-
-    const auto ret = messageCommandInterface_->GetStackLocals(stackFrame, path->std_str(), pagination, variables);
-    if (ret != data::ReturnCode::Success) { return createReturnCodeResponse(ret); }
-
-    const auto varListDto = dto::VariableList::createShared();
-    varListDto->variables = createVariablesList(variables);
-    return createDtoResponse(Status::CODE_200, varListDto);
+    return handleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
+      std::vector<data::Variable> variables;
+      return std::tuple(messageCommandInterface_->GetStackVariables(stackFrame, path->std_str(), pagination, variables),
+                        variables);
+    });
   }
   ENDPOINT_INFO(stackLocals)
   {
     info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
+    addCommandMessagePaginationParams(info);
+    addCommandMessageErrorResponses(info);
+  }
 
-    auto& beginIteratorParam = info->queryParams.add<UInt32>("beginIterator");
-    beginIteratorParam.required = false;
-    beginIteratorParam.description = "Start at given pathIterator for pagination. Provide 0 to start at the beginning.";
-
-    auto& countParam = info->queryParams.add<UInt32>("count");
-    countParam.required = false;
-    countParam.description = "Count of items for pagination. Count must be at most 1000.";
-
+  ENDPOINT("GET", "Variables/Global", stackGlobals, QUERY(String, path),
+           QUERIES(QueryParams, queryParams))
+  {
+    return handleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
+      std::vector<data::Variable> variables;
+      return std::tuple(messageCommandInterface_->GetGlobalVariables(path->std_str(), pagination, variables),
+                        variables);
+    });
+  }
+  ENDPOINT_INFO(stackGlobals)
+  {
+    info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
+    addCommandMessagePaginationParams(info);
     addCommandMessageErrorResponses(info);
   }
 
@@ -108,6 +109,16 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_400, "application/json");
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_500, "application/json");
+  }
+  static void addCommandMessagePaginationParams(const std::shared_ptr<Endpoint::Info>& info)
+  {
+    auto& beginIteratorParam = info->queryParams.add<UInt32>("beginIterator");
+    beginIteratorParam.required = false;
+    beginIteratorParam.description = "Start at given pathIterator for pagination. Provide 0 to start at the beginning.";
+
+    auto& countParam = info->queryParams.add<UInt32>("count");
+    countParam.required = false;
+    countParam.description = "Count of items for pagination. Count must be at most 1000.";
   }
 
   [[nodiscard]] static bool parseQueryParamWithDefault(const QueryParams& queryParams, const char* name,
@@ -123,6 +134,23 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     ss >> parsedValue;
     return !ss.fail();
   }
+  
+  std::shared_ptr<OutgoingResponse> handleVariablesCommandMessage(const QueryParams& queryParams,
+                                                                  const VariablesCallback& getVariablesFn)
+  {
+    data::PaginationInfo pagination = {};
+    const bool validParams = parseQueryParamWithDefault(queryParams, "beginIterator", 0U, pagination.beginIterator) &&
+                             parseQueryParamWithDefault(queryParams, "count", 100U, pagination.count) &&
+                             pagination.count <= 1000U;
+    if (!validParams) { return createReturnCodeResponse(data::ReturnCode::InvalidParameter); }
+
+    const auto [ret, variables] = getVariablesFn(pagination);
+    if (ret != data::ReturnCode::Success) { return createReturnCodeResponse(ret); }
+
+    const auto varListDto = dto::VariableList::createShared();
+    varListDto->variables = createVariablesList(variables);
+    return createDtoResponse(Status::CODE_200, varListDto);
+  }
 
   List<Object<dto::Variable>> createVariablesList(const std::vector<data::Variable>& variables) const
   {
@@ -137,6 +165,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
       variableDto->value = String(variable.value.c_str(), static_cast<v_buff_size>(variable.value.size()), false);
       variableDto->valueRawAddress = variable.valueRawAddress;
       variableDto->childCount = variable.childCount;
+      variableDto->instanceClassName = String(variable.instanceClassName.c_str(), static_cast<v_buff_size>(variable.instanceClassName.size()), false);
 
       variablesDto->emplace_back(std::move(variableDto));
     }

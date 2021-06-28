@@ -4163,25 +4163,25 @@ vsce@^1.88.0:
     yauzl "^2.3.1"
     yazl "^2.2.2"
 
-vscode-debugadapter-testsupport@^1.46.0:
-  version "1.46.0"
-  resolved "https://registry.yarnpkg.com/vscode-debugadapter-testsupport/-/vscode-debugadapter-testsupport-1.46.0.tgz#4baa955523cc430fd8377d165e4d86115f420378"
-  integrity sha512-6n+uu4+Q5sZvN2FgFLNJkyaE6AECYzFh+Hfv+IeJoVKA7KNiQ1SNd3yTsvSFxkS00LmVU6V00XGaqZRlwM15Jg==
+vscode-debugadapter-testsupport@^1.47.0:
+  version "1.47.0"
+  resolved "https://registry.yarnpkg.com/vscode-debugadapter-testsupport/-/vscode-debugadapter-testsupport-1.47.0.tgz#d4a07c5c57708ffaab887f44a5c081a76eef1477"
+  integrity sha512-zhEuaMt2RCOcJoTZ5p35k2WhCzk51UN1PlrtwfWJ8fiFhjDvXIG+682Wkq1VyL12EhTf4qOLMLn0X4JlX7eJ6g==
   dependencies:
-    vscode-debugprotocol "^1.46.0"
+    vscode-debugprotocol "^1.47.0"
 
-vscode-debugadapter@^1.46.0:
-  version "1.46.0"
-  resolved "https://registry.yarnpkg.com/vscode-debugadapter/-/vscode-debugadapter-1.46.0.tgz#05ccf51f3e0167bd8b169e6cb40e997df6991425"
-  integrity sha512-DUOplVSgePFjFi8WLDU4ZQP+95+Zsj5vclxtwlxiqm9V6YhLBtU57FveG2xivBBhVuq1rsD+AauvxfeEo7yIKw==
+vscode-debugadapter@^1.47.0:
+  version "1.47.0"
+  resolved "https://registry.yarnpkg.com/vscode-debugadapter/-/vscode-debugadapter-1.47.0.tgz#fd296344cabc95f1052d7ed2498f0c20c39378e8"
+  integrity sha512-ppO1M9/mwsxE1B1lNNhZ9z1IfNNaRfDmR+yrdRQBW6Tz4VmNhRJ5hyUREJGk+OyW26RU4shO6tXpZa9CzUYiQw==
   dependencies:
     mkdirp "^0.5.5"
-    vscode-debugprotocol "1.46.0"
+    vscode-debugprotocol "1.47.0"
 
-vscode-debugprotocol@1.46.0, vscode-debugprotocol@^1.46.0:
-  version "1.46.0"
-  resolved "https://registry.yarnpkg.com/vscode-debugprotocol/-/vscode-debugprotocol-1.46.0.tgz#1f6d0420fb91c158babba2eeb988a4b00d062815"
-  integrity sha512-V10u1L679DJZfOtQXhKylJPMqNbhazav4mRxPrBE8/Jpznow1b1j1EGDDvJ4prQ623CLAnvpFfVkVQ+CX3xdtg==
+vscode-debugprotocol@1.47.0, vscode-debugprotocol@^1.47.0:
+  version "1.47.0"
+  resolved "https://registry.yarnpkg.com/vscode-debugprotocol/-/vscode-debugprotocol-1.47.0.tgz#700055bea38633a9530a5a552fb3ea314d76b73f"
+  integrity sha512-ii7oCz3Wfr/SGtFr5AYop5dJm0dUmpg0hq2lTzTBdaht8nSheYMMjPntxULBR+2TUxXLcCKFZkF2UEJQduYsIQ==
 
 watchpack-chokidar2@^2.0.1:
   version "2.0.1"

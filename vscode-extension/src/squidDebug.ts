@@ -12,7 +12,7 @@ import {
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { basename } from 'path';
 import { SquidRuntime, ISquidBreakpoint, FileAccessor } from './squidRuntime';
-import { VariableType } from './squidDto';
+import { Variable, VariableType } from './squidDto';
 import { Subject } from 'await-notify';
 
 function timeout(ms: number) {
@@ -57,6 +57,8 @@ export class SquidDebugSession extends DebugSession {
 
     private _showHex = false;
     private _useInvalidatedEvent = false;
+    private _useVariableType = false;
+    private _useMemoryReferences = false;
 
     /**
      * Creates a new debug adapter that is used for one debug session.
@@ -120,13 +122,10 @@ export class SquidDebugSession extends DebugSession {
      * to interrogate the features the debug adapter provides.
      */
     protected initializeRequest(response: DebugProtocol.InitializeResponse, args: DebugProtocol.InitializeRequestArguments): void {
-
-        if (args.supportsProgressReporting) {
-            this._reportProgress = true;
-        }
-        if (args.supportsInvalidatedEvent) {
-            this._useInvalidatedEvent = true;
-        }
+        this._reportProgress = !!args.supportsProgressReporting;
+        this._useVariableType = !!args.supportsVariableType;
+        this._useInvalidatedEvent = !!args.supportsInvalidatedEvent;
+        this._useMemoryReferences = !!args.supportsMemoryReferences;
 
         // build and return the capabilities of this debug adapter:
         response.body = response.body || {};
@@ -344,7 +343,7 @@ export class SquidDebugSession extends DebugSession {
         response.body = {
             scopes: [
                 new Scope("Local", this._variableHandles.create("local:" + args.frameId + ':'), false),
-                new Scope("Global", this._variableHandles.create("global"), true)
+                new Scope("Global", this._variableHandles.create("global:"), true)
             ]
         };
         this.sendResponse(response);
@@ -378,47 +377,89 @@ export class SquidDebugSession extends DebugSession {
             }
 */
         } else {
-
             const id = this._variableHandles.get(args.variablesReference);
+
+            let getVariablesPms: Promise<Variable[]>;
             if (id.startsWith('local:')) {
                 const secondPos = id.indexOf(':', 6);
                 const frameId = id.substr(6, secondPos - 6);
                 const path:string = id.substr(secondPos + 1);
                 logger.log(`variablesRequest id=${id} frameId=${frameId} path=${path}`);
-
-                this._runtime.getStackLocals(parseInt(frameId), path).then((vars) => {
-                    const variables: DebugProtocol.Variable[] = [];
-                    for (let v of vars) {
-                        let debugVarInfo = {
-                            name: v.pathUiString,
-                            type: VariableType[v.valueType],
-                            value: v.value,
-                            variablesReference: 0
-                        } as DebugProtocol.Variable;
-
-                        if (v.childCount > 0) {
-                            let subobjectId = id;
-                            if (!id.endsWith(':')) { subobjectId += ','; }
-                            subobjectId += v.pathIterator;
-
-                            debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
-                        }
-
-                        variables.push(debugVarInfo);
+                getVariablesPms = this._runtime.getLocalVariables(parseInt(frameId), path);
+            } else if (id.startsWith('global:')) {
+                const path = id.substr(7);
+                getVariablesPms = this._runtime.getGlobalVariables(path);
+            } else {
+                getVariablesPms = Promise.reject('Unknown ID: ' + id);
+            }
+            
+            getVariablesPms.then((vars) => {
+                const variables: DebugProtocol.Variable[] = [];
+                for (let v of vars) {
+                    let debugVarInfo = {
+                        name: v.pathUiString,
+                        value: v.value,
+                        variablesReference: 0,
+                        presentationHint: undefined,
+                    } as DebugProtocol.Variable;
+                    
+                    // Fields that clients may not support
+                    if (this._useVariableType) {
+                        debugVarInfo.type = VariableType[v.valueType];
+                    }
+                    if (this._useMemoryReferences && v.valueRawAddress) {
+                        debugVarInfo.memoryReference = '0x' + v.valueRawAddress.toString(16);
                     }
 
-                    response.body = {
-                        variables: variables
-                    };
-                    this.sendResponse(response);
-                }).catch((reason) => {
-                    logger.error(`variablesRequest failed. reason: ${reason}`);
-                    response.success = false;
-                    response.message = reason;
-                    this.sendResponse(response);
-                });
-                return;
-            }
+                    // Annotations and style
+                    if (v.valueType === VariableType.integer) {
+                        const value: number = parseInt(v.value);
+                        if (typeof(value) === 'number' && !isNaN(value) && this._showHex) {
+                            debugVarInfo.value = '0x' + value.toString(16);
+                        }
+                    }
+                    if (v.valueType === VariableType.closure) {
+                        debugVarInfo.presentationHint = {
+                            kind: 'method'
+                        };
+                        debugVarInfo.value = 'FUNCTION ' + v.value;
+                    } else if (v.valueType === VariableType.class) {
+                        debugVarInfo.presentationHint = {
+                            kind: 'class'
+                        };
+                        debugVarInfo.value = 'CLASS ' + v.value;
+                    } else if (v.valueType === VariableType.instance) {
+                        debugVarInfo.value = `<${v.instanceClassName ?? 'INSTANCE'}> ${v.value}`; 
+                        if (v.valueRawAddress) {
+                            v.value += ` (0x${v.valueRawAddress})`;
+                        }
+                    } else if (v.valueType === VariableType.table || v.valueType === VariableType.array) {
+                        debugVarInfo.value = `${VariableType[v.valueType].toUpperCase()} v.value`;
+                    }
+
+                    // Child id's
+                    if (v.childCount > 0) {
+                        let subobjectId = id;
+                        if (!id.endsWith(':')) { subobjectId += ','; }
+                        subobjectId += v.pathIterator;
+
+                        debugVarInfo.variablesReference = this._variableHandles.create(subobjectId);
+                    }
+
+                    variables.push(debugVarInfo);
+                }
+
+                response.body = {
+                    variables: variables
+                };
+                this.sendResponse(response);
+            }).catch((reason) => {
+                logger.error(`variablesRequest failed. reason: ${reason}`);
+                response.success = false;
+                response.message = reason;
+                this.sendResponse(response);
+            });
+            return;
         }
 
         response.success = false;

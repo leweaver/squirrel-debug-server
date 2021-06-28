@@ -253,10 +253,6 @@ std::string sdb_sq_toString(const HSQUIRRELVM v, const SQInteger idx)
     } break;
     case OT_INSTANCE:
     {
-      if (SQ_SUCCEEDED(sq_getclass(v, idx))) {
-        ss << GetClassFullName(v) << " ";
-        sq_poptop(v);// pop class
-      }
       CreateTableSummary(v, ss);
     } break;
     case OT_TABLE:
@@ -286,10 +282,17 @@ ReturnCode CreateChildVariable(HSQUIRRELVM v, Variable& variable)
   variable.value = sdb_sq_toString(v, -1);
 
   switch (variable.valueType) {
+    case VariableType::Instance:
+    {
+      if (SQ_SUCCEEDED(sq_getclass(v, -1))) {
+        variable.instanceClassName = GetClassFullName(v);
+        sq_poptop(v);// pop class
+      }
+      [[fallthrough]];
+    }
     case VariableType::Array:
     case VariableType::Table:
-    case VariableType::Instance:
-      variable.childCount = sq_getsize(v, -1);
+      variable.childCount = static_cast<uint32_t>(sq_getsize(v, -1));
       break;
     default:
       variable.childCount = 0;
@@ -447,7 +450,7 @@ ReturnCode sdb_sq_readVariableChildren(HSQUIRRELVM v, std::vector<uint64_t>::con
         return ReturnCode::InvalidParameter;
       }
       const auto childRetVal = sdb_sq_readVariableChildren(v, pathBegin + 1, pathEnd, pagination, variables);
-      sq_poptop(v); // pop value
+      sq_poptop(v);// pop value
       return childRetVal;
     }
     case OT_TABLE:
@@ -457,11 +460,11 @@ ReturnCode sdb_sq_readVariableChildren(HSQUIRRELVM v, std::vector<uint64_t>::con
       sq_pushinteger(v, *pathBegin);
       if (!SQ_SUCCEEDED(sq_next(v, -2))) {
         // TODO: Log where in the path it went wrong
-        sq_poptop(v); // pop iterator
+        sq_poptop(v);// pop iterator
         return ReturnCode::InvalidParameter;
       }
       const auto childRetVal = sdb_sq_readVariableChildren(v, pathBegin + 1, pathEnd, pagination, variables);
-      sq_pop(v, 3); // pop value, key and iterator
+      sq_pop(v, 3);// pop value, key and iterator
       return childRetVal;
     }
     default:
@@ -676,14 +679,23 @@ ReturnCode SquirrelDebugger::StepOver() { return Step(PauseType::StepOver, 0); }
 
 ReturnCode SquirrelDebugger::StepIn() { return Step(PauseType::StepIn, -1); }
 
-ReturnCode SquirrelDebugger::GetStackLocals(int32_t stackFrame, const std::string& path,
-                                            const data::PaginationInfo& pagination, std::vector<Variable>& variables)
+ReturnCode SquirrelDebugger::GetStackVariables(int32_t stackFrame, const std::string& path,
+                                               const data::PaginationInfo& pagination, std::vector<Variable>& variables)
 {
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_.isPaused) { return ReturnCode::InvalidNotPaused; }
 
   if (stackFrame > vmData_.currentStackDepth) { return ReturnCode::InvalidParameter; }
   return vmData_.PopulateStackVariables(stackFrame, path, pagination, variables);
+}
+
+ReturnCode SquirrelDebugger::GetGlobalVariables(const std::string& path, const PaginationInfo& pagination,
+                                                std::vector<Variable>& variables)
+{
+  std::lock_guard lock(pauseMutex_);
+  if (!pauseMutexData_.isPaused) { return ReturnCode::InvalidNotPaused; }
+
+  return vmData_.PopulateGlobalVariables(path, pagination, variables);
 }
 
 ReturnCode SquirrelDebugger::Step(PauseType pauseType, int returnsRequired)
@@ -786,7 +798,7 @@ void SquirrelDebugger::SquirrelVmData::PopulateStack(std::vector<StackEntry>& st
 }
 
 ReturnCode SquirrelDebugger::SquirrelVmData::PopulateStackVariables(int32_t stackFrame, const std::string& path,
-                                                                    const data::PaginationInfo& pagination,
+                                                                    const PaginationInfo& pagination,
                                                                     std::vector<Variable>& stack) const
 {
   ScopedVerifySqTop scopedVerify(vm);
@@ -822,16 +834,40 @@ ReturnCode SquirrelDebugger::SquirrelVmData::PopulateStackVariables(int32_t stac
       stack.emplace_back(std::move(variable));
     }
   } else {
-      // Push local with given index to stack
-      const auto* const localName = sq_getlocal(vm, stackFrame, *pathParts.begin());
-      if (localName == nullptr) { return ReturnCode::InvalidParameter; }
+    // Push local with given index to stack
+    const auto* const localName = sq_getlocal(vm, stackFrame, *pathParts.begin());
+    if (localName == nullptr) { return ReturnCode::InvalidParameter; }
 
-      //variable.name = *(pathParts.end() - 1);
-      rc = sdb_sq_readVariableChildren(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
+    //variable.name = *(pathParts.end() - 1);
+    rc = sdb_sq_readVariableChildren(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
 
-      // Remove local from stack
-      sq_poptop(vm);
+    // Remove local from stack
+    sq_poptop(vm);
   }
+
+  return rc;
+}
+
+ReturnCode SquirrelDebugger::SquirrelVmData::PopulateGlobalVariables(const std::string& path,
+                                                                     const PaginationInfo& pagination,
+                                                                     std::vector<Variable>& stack) const
+{
+  ScopedVerifySqTop scopedVerify(vm);
+
+  std::vector<uint64_t> pathParts;
+  if (!path.empty()) {
+    // Convert comma-separated list to vector
+    std::stringstream s_stream(path);
+    while (s_stream.good()) {
+      std::string substr;
+      getline(s_stream, substr, ',');
+      pathParts.emplace_back(stoi(substr));
+    }
+  }
+
+  sq_pushroottable(vm);
+  const ReturnCode rc = sdb_sq_readVariableChildren(vm, pathParts.begin(), pathParts.end(), pagination, stack);
+  sq_poptop(vm);
 
   return rc;
 }

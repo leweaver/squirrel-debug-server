@@ -43,6 +43,8 @@ struct Variable {
   std::string value;
   uint64_t valueRawAddress = 0;
   uint32_t childCount = 0;
+  // If valueType is Instance, this is set with the full class name.
+  std::string instanceClassName;
 };
 struct PaginationInfo {
   uint32_t beginIterator;
@@ -86,9 +88,12 @@ class MessageCommandInterface {
   /// </summary>
   [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetStackLocals(int32_t stackFrame, const std::string& path,
+  [[nodiscard]] virtual data::ReturnCode GetStackVariables(int32_t stackFrame, const std::string& path,
                                                         const data::PaginationInfo& pagination,
                                                         std::vector<data::Variable>& variables) = 0;
+
+  [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(const std::string& path, const data::PaginationInfo& pagination,
+                                                    std::vector<data::Variable>& variables) = 0;
 };
 
 /// <summary>

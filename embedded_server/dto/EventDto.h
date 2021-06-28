@@ -75,6 +75,7 @@ class Variable : public oatpp::DTO {
   DTO_FIELD(String, value);
   DTO_FIELD(UInt64, valueRawAddress);
   DTO_FIELD(UInt32, childCount);
+  DTO_FIELD(String, instanceClassName);
 };
 
 class VariableList : public oatpp::DTO {
