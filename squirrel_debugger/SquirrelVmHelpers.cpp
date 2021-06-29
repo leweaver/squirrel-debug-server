@@ -34,7 +34,7 @@ const std::array<VariableType, 18> kVariableTypes = {
         VariableType::WeakRef, VariableType::Outer,
 };
 
-const char* toSqObjectTypeName(SQObjectType sqType)
+const char* ToSqObjectTypeName(SQObjectType sqType)
 {
   // Get index of least sig set bit:
 #ifdef _MSC_VER
@@ -45,7 +45,7 @@ const char* toSqObjectTypeName(SQObjectType sqType)
   return kTypeNames.at(31 - idx);
 }
 
-VariableType toVariableType(const SQObjectType sqType)
+VariableType ToVariableType(const SQObjectType sqType)
 {
   // Get index of least sig set bit:
 #ifdef _MSC_VER
@@ -70,13 +70,13 @@ struct WriteTableSummaryFieldHelper {
 std::ostream& operator<<(std::ostream& ss, const WriteTableSummaryFieldHelper& helper)
 {
   auto* const v = helper.vm;
-  const auto valueStr = toString(v, -1);
+  const auto valueStr = ToString(v, -1);
   if (!valueStr.empty()) {
     if (!helper.isFirst) {
       ss << ", ";
     }
     sq_poptop(v);// pop val, so we can get the key
-    ss << toString(v, -1) << ": " << valueStr;
+    ss << ToString(v, -1) << ": " << valueStr;
     sq_poptop(v);// pop key
   }
   else {
@@ -138,7 +138,7 @@ void CreateTableSummary(HSQUIRRELVM v, std::stringstream& ss)
     sq_pushinteger(v, sqIter);
     for (SQInteger i = 0; SQ_SUCCEEDED(sq_getinteger(v, -1, &sqIter)) && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
       sq_poptop(v);// don't need the value.
-      tableKeyToIterator.emplace_back(KeyToTableIter{toString(v, -1), sqIter});
+      tableKeyToIterator.emplace_back(KeyToTableIter{ToString(v, -1), sqIter});
       sq_poptop(v);// pop key before next iteration
     }
     sq_poptop(v);
@@ -173,7 +173,7 @@ void CreateTableSummary(HSQUIRRELVM v, std::stringstream& ss)
 };
 
 // Simple to_string of the var at the top of the stack.
-std::string toString(SQVM* const v, const SQInteger idx)
+std::string ToString(SQVM* const v, const SQInteger idx)
 {
   std::stringstream ss;
   const auto type = sq_gettype(v, idx);
@@ -236,7 +236,7 @@ std::string toString(SQVM* const v, const SQInteger idx)
     }
     case OT_CLASS:
     {
-      ss << classFullName(v, -1);
+      ss << ToClassFullName(v, -1);
       break;
     }
     case OT_ARRAY:
@@ -252,13 +252,13 @@ std::string toString(SQVM* const v, const SQInteger idx)
       CreateTableSummary(v, ss);
     } break;
     default:
-      ss << toSqObjectTypeName(type);
+      ss << ToSqObjectTypeName(type);
   }
 
   return ss.str();
 }
 
-ReturnCode createChildVariable(SQVM* const v, Variable& variable)
+ReturnCode CreateChildVariable(SQVM* const v, Variable& variable)
 {
   std::stringstream ss;
   const auto topIdx = sq_gettop(v);
@@ -272,14 +272,14 @@ ReturnCode createChildVariable(SQVM* const v, Variable& variable)
     }
   }
 
-  variable.valueType = toVariableType(sq_gettype(v, -1));
-  variable.value = toString(v, -1);
+  variable.valueType = ToVariableType(sq_gettype(v, -1));
+  variable.value = ToString(v, -1);
 
   switch (variable.valueType) {
     case VariableType::Instance:
     {
       if (SQ_SUCCEEDED(sq_getclass(v, -1))) {
-        variable.instanceClassName = classFullName(v, -1);
+        variable.instanceClassName = ToClassFullName(v, -1);
         sq_poptop(v);// pop class
       }
       else {
@@ -301,15 +301,15 @@ ReturnCode createChildVariable(SQVM* const v, Variable& variable)
 ReturnCode CreateChildVariables(SQVM* const v, const PaginationInfo& pagination, std::vector<Variable>& variables)
 {
   const auto createTableChildVariableFromIter = [vm = v](Variable& variable) -> ReturnCode {
-    const auto retVal = createChildVariable(vm, variable);
+    const auto retVal = CreateChildVariable(vm, variable);
     if (ReturnCode::Success != retVal) {
       sq_pop(vm, 2);
       return retVal;
     }
 
     sq_poptop(vm);// pop val, so we can get the key
-    variable.pathUiString = toString(vm, -1);
-    variable.pathTableKeyType = toVariableType(sq_gettype(vm, -1));
+    variable.pathUiString = ToString(vm, -1);
+    variable.pathTableKeyType = ToVariableType(sq_gettype(vm, -1));
     sq_poptop(vm);// pop key before next iteration
 
     return ReturnCode::Success;
@@ -325,11 +325,11 @@ ReturnCode CreateChildVariables(SQVM* const v, const PaginationInfo& pagination,
       {
         Variable childVar = {};
 
-        createChildVariable(v, childVar);
+        CreateChildVariable(v, childVar);
 
         sq_poptop(v);// pop val, so we can get the key
         childVar.pathIterator = sqIter;
-        childVar.pathUiString = toString(v, -1);
+        childVar.pathUiString = ToString(v, -1);
         sq_poptop(v);// pop key before next iteration
 
         variables.emplace_back(std::move(childVar));
@@ -350,7 +350,7 @@ ReturnCode CreateChildVariables(SQVM* const v, const PaginationInfo& pagination,
         sq_pushinteger(v, sqIter);
         for (SQInteger i = 0; SQ_SUCCEEDED(sq_getinteger(v, -1, &sqIter)) && SQ_SUCCEEDED(sq_next(v, -2)); ++i) {
           sq_poptop(v);// don't need the value.
-          tableKeyToIterator.emplace_back(KeyToTableIter{toString(v, -1), sqIter});
+          tableKeyToIterator.emplace_back(KeyToTableIter{ToString(v, -1), sqIter});
           sq_poptop(v);// pop key before next iteration
         }
         sq_poptop(v);
@@ -403,7 +403,7 @@ ReturnCode CreateChildVariables(SQVM* const v, const PaginationInfo& pagination,
   return ReturnCode::Success;
 }
 
-ReturnCode createChildVariablesFromIterable(
+ReturnCode CreateChildVariablesFromIterable(
         SQVM* const v, const std::vector<uint64_t>::const_iterator pathBegin,
         const std::vector<uint64_t>::const_iterator pathEnd, const PaginationInfo& pagination,
         std::vector<Variable>& variables)
@@ -435,7 +435,7 @@ ReturnCode createChildVariablesFromIterable(
         SDB_LOGD(__FILE__, "Failed to get array index %d", arrIndex);
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = createChildVariablesFromIterable(v, pathBegin + 1, pathEnd, pagination, variables);
+      const auto childRetVal = CreateChildVariablesFromIterable(v, pathBegin + 1, pathEnd, pagination, variables);
       sq_poptop(v);// pop value
       return childRetVal;
     }
@@ -449,7 +449,7 @@ ReturnCode createChildVariablesFromIterable(
         sq_poptop(v);// pop iterator
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = createChildVariablesFromIterable(v, pathBegin + 1, pathEnd, pagination, variables);
+      const auto childRetVal = CreateChildVariablesFromIterable(v, pathBegin + 1, pathEnd, pagination, variables);
       sq_pop(v, 3);// pop value, key and iterator
       return childRetVal;
     }
@@ -459,7 +459,7 @@ ReturnCode createChildVariablesFromIterable(
   }
 }
 
-std::string classFullName(SQVM* const v, const SQInteger idx)
+std::string ToClassFullName(SQVM* const v, const SQInteger idx)
 {
   // TODO: May want to cache this bad boy. Is this even possible?
 

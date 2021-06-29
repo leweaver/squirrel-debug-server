@@ -3,9 +3,9 @@
 using sdb::Breakpoint;
 using sdb::BreakpointMap;
 
-void BreakpointMap::clear(const std::string& fileName)
+void BreakpointMap::Clear(const std::string& fileName)
 {
-  const auto handle = findFileNameHandle(fileName);
+  const auto handle = FindFileNameHandle(fileName);
   if (handle == nullptr) { return; }
 
   const auto bpMapPos = breakpoints_.find(handle);
@@ -14,17 +14,17 @@ void BreakpointMap::clear(const std::string& fileName)
   bpMapPos->second.clear();
 }
 
-void BreakpointMap::addAll(const std::string& fileName, std::vector<Breakpoint>& breakpoints)
+void BreakpointMap::AddAll(const std::string& fileName, std::vector<Breakpoint>& breakpoints)
 {
-  const auto handle = ensureFileNameHandle(fileName);
+  const auto handle = EnsureFileNameHandle(fileName);
 
   auto& lineToBpMap = breakpoints_[handle];
   for (const auto& bp : breakpoints) { lineToBpMap[bp.line] = bp; }
 }
 
-bool BreakpointMap::readBreakpoint(const std::string& fileName, const uint32_t line, Breakpoint& bp) const
+bool BreakpointMap::ReadBreakpoint(const std::string& fileName, const uint32_t line, Breakpoint& bp) const
 {
-  const auto handle = findFileNameHandle(fileName);
+  const auto handle = FindFileNameHandle(fileName);
   if (handle == nullptr) { return false; }
 
   const auto bpMapPos = breakpoints_.find(handle);
@@ -38,7 +38,7 @@ bool BreakpointMap::readBreakpoint(const std::string& fileName, const uint32_t l
   return true;
 }
 
-BreakpointMap::FileNameHandle BreakpointMap::findFileNameHandle(const std::string& fileName) const
+BreakpointMap::FileNameHandle BreakpointMap::FindFileNameHandle(const std::string& fileName) const
 {
   const auto handlePos = std::find_if(fileNames_.begin(), fileNames_.end(),
                                       [&fileName](const FileNameHandle& f) { return *f == fileName; });
@@ -46,7 +46,7 @@ BreakpointMap::FileNameHandle BreakpointMap::findFileNameHandle(const std::strin
   return *handlePos;
 }
 
-BreakpointMap::FileNameHandle BreakpointMap::ensureFileNameHandle(const std::string& fileName)
+BreakpointMap::FileNameHandle BreakpointMap::EnsureFileNameHandle(const std::string& fileName)
 {
   const auto handlePos = std::find_if(fileNames_.begin(), fileNames_.end(),
                                       [&fileName](const FileNameHandle& f) { return *f == fileName; });

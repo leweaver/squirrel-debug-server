@@ -9,7 +9,10 @@
 #include <oatpp/core/base/Environment.hpp>
 
 namespace sdb {
-class ForwardingLogger : public oatpp::base::Logger {
+/**
+ * A class that forwards OATPP log messages to the LogInterface.
+ */
+class ForwardingLogger final : public oatpp::base::Logger {
  public:
   /**
    * Default Logger Config.
@@ -18,11 +21,15 @@ class ForwardingLogger : public oatpp::base::Logger {
 
     /**
      * Constructor.
-     * @param tfmt - time format.
+     * @param initialTimeFormat - time format.
      * @param printMicroTicks - show ticks in microseconds.
+     * @param initialLogMask - bitmask of PRIORITY_X constants with enabled log levels
      */
-    Config(const char* tfmt, bool printMicroTicks, v_uint32 initialLogMask)
-        : timeFormat(tfmt), printTicks(printMicroTicks), logMask(initialLogMask) {}
+    Config(const char* initialTimeFormat, const bool printMicroTicks, const v_uint32 initialLogMask)
+        : timeFormat(initialTimeFormat)
+        , printTicks(printMicroTicks)
+        , logMask(initialLogMask)
+    {}
 
     /**
      * Time format of the log message.
@@ -41,19 +48,15 @@ class ForwardingLogger : public oatpp::base::Logger {
     v_uint32 logMask;
   };
 
- private:
-  Config m_config;
-  std::mutex m_lock;
-
- public:
   /**
    * Constructor.
    * @param config - Logger config.
    */
-  explicit ForwardingLogger(const Config& config = Config(
-                                  "%Y-%m-%d %H:%M:%S",
-                                  true,
-                                  (1 << PRIORITY_V) | (1 << PRIORITY_D) | (1 << PRIORITY_I) | (1 << PRIORITY_W) | (1 << PRIORITY_E)));
+  explicit ForwardingLogger(
+          const Config& config =
+                  Config("%Y-%m-%d %H:%M:%S", true,
+                         (1U << PRIORITY_V) | (1U << PRIORITY_D) | (1U << PRIORITY_I) | (1U << PRIORITY_W) |
+                                 (1U << PRIORITY_E)));
 
   /**
    * Log message with priority, tag, message.
@@ -64,23 +67,14 @@ class ForwardingLogger : public oatpp::base::Logger {
   void log(v_uint32 priority, const std::string& tag, const std::string& message) override;
 
   /**
-   * Enables logging of a priorities for this instance
-   * @param priority - the priority level to enable
-   */
-  void enablePriority(v_uint32 priority);
-
-  /**
-   * Disables logging of a priority for this instance
-   * @param priority - the priority level to disable
-   */
-  void disablePriority(v_uint32 priority);
-
-  /**
-   * Returns wether or not a priority should be logged/printed
-   * @param priority
-   * @return - true if given priority should be logged
+   * Returns whether or not a priority should be logged/printed
+   * @param priority - a PRIORITY_X define
+   * @return true if given priority should be logged
    */
   bool isLogPriorityEnabled(v_uint32 priority) override;
+
+ private:
+  Config config_;
 };
 }// namespace sdb
 

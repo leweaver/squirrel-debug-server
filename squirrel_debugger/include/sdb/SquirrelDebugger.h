@@ -15,8 +15,10 @@
 #include <mutex>
 
 namespace sdb {
+namespace internal {
 struct PauseMutexDataImpl;
 struct SquirrelVmDataImpl;
+}// namespace internal
 
 class SquirrelDebugger final : public MessageCommandInterface {
  public:
@@ -30,28 +32,31 @@ class SquirrelDebugger final : public MessageCommandInterface {
   SquirrelDebugger& operator=(SquirrelDebugger&&) = delete;
 
   // The following methods are called from the networking thread.
-  [[nodiscard]] data::ReturnCode pauseExecution() override;
-  [[nodiscard]] data::ReturnCode continueExecution() override;
-  [[nodiscard]] data::ReturnCode stepOut() override;
-  [[nodiscard]] data::ReturnCode stepOver() override;
-  [[nodiscard]] data::ReturnCode stepIn() override;
-  [[nodiscard]] data::ReturnCode sendStatus() override;
-  [[nodiscard]] data::ReturnCode getStackVariables(int32_t stackFrame, const std::string& path,
+  [[nodiscard]] data::ReturnCode PauseExecution() override;
+  [[nodiscard]] data::ReturnCode ContinueExecution() override;
+  [[nodiscard]] data::ReturnCode StepOut() override;
+  [[nodiscard]] data::ReturnCode StepOver() override;
+  [[nodiscard]] data::ReturnCode StepIn() override;
+  [[nodiscard]] data::ReturnCode SendStatus() override;
+  [[nodiscard]] data::ReturnCode GetStackVariables(int32_t stackFrame, const std::string& path,
                                                    const data::PaginationInfo& pagination,
                                                    std::vector<data::Variable>& variables) override;
 
-  [[nodiscard]] data::ReturnCode getGlobalVariables(const std::string& path, const data::PaginationInfo& pagination,
+  [[nodiscard]] data::ReturnCode GetGlobalVariables(const std::string& path, const data::PaginationInfo& pagination,
                                                     std::vector<data::Variable>& variables) override;
 
-  [[nodiscard]] data::ReturnCode setFileBreakpoints(const std::string& file,
+  [[nodiscard]] data::ReturnCode SetFileBreakpoints(const std::string& file,
                                                     const std::vector<data::CreateBreakpoint>& createBps,
                                                     std::vector<data::ResolvedBreakpoint>& resolvedBps) override;
 
   // The following methods are called from the scripting engine thread
-  void setEventInterface(std::shared_ptr<sdb::MessageEventInterface> eventInterface);
-  void addVm(HSQUIRRELVM vm);
-  void squirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourceName, SQInteger line,
+  void SetEventInterface(std::shared_ptr<MessageEventInterface> eventInterface);
+  void AddVm(HSQUIRRELVM vm);
+  void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourceName, SQInteger line,
                                const SQChar* functionName);
+
+  // Configuration
+  static SQInteger DefaultStackSize();
 
  private:
   enum class PauseType : uint8_t { None, StepOut, StepOver, StepIn, Pause = StepIn };
@@ -65,7 +70,7 @@ class SquirrelDebugger final : public MessageCommandInterface {
   std::atomic<PauseType> pauseRequested_ = PauseType::None;
 
   // must lock pauseMutex_ to modify any members of this struct instance
-  PauseMutexDataImpl* pauseMutexData_;
+  internal::PauseMutexDataImpl* pauseMutexData_;
 
   std::mutex pauseMutex_;
   std::condition_variable pauseCv_;
@@ -74,7 +79,7 @@ class SquirrelDebugger final : public MessageCommandInterface {
   std::atomic_uint64_t breakpointMapChangeCount_;
 
   // This must only be accessed within the Squirrel Execution Thread.
-  SquirrelVmDataImpl* vmData_;
+  internal::SquirrelVmDataImpl* vmData_;
 };
 }// namespace sdb
 

@@ -17,21 +17,21 @@ struct Breakpoint {
 
 class BreakpointMap {
  public:
-  void clear(const std::string& fileName);
+  void Clear(const std::string& fileName);
 
   // Adds all of the given breakpoints. If a breakpoint already exists on the given line, it will be replaced.
-  void addAll(const std::string& fileName, std::vector<Breakpoint>& breakpoints);
+  void AddAll(const std::string& fileName, std::vector<Breakpoint>& breakpoints);
 
   // Attempts to find a breakpoint in the given file, at the given line.
   // If none is found, returns false and `bp` is unaltered.
   // If a breakpoint is fund, it is assigned to `bp`
-  bool readBreakpoint(const std::string& fileName, uint32_t line, Breakpoint& bp) const;
+  bool ReadBreakpoint(const std::string& fileName, uint32_t line, Breakpoint& bp) const;
 
  private:
   using FileNameHandle = std::shared_ptr<std::string>;
 
-  FileNameHandle findFileNameHandle(const std::string& fileName) const;
-  FileNameHandle ensureFileNameHandle(const std::string& fileName);
+  [[nodiscard]] FileNameHandle FindFileNameHandle(const std::string& fileName) const;
+  FileNameHandle EnsureFileNameHandle(const std::string& fileName);
 
   std::vector<FileNameHandle> fileNames_;
   std::unordered_map<FileNameHandle, std::unordered_map<uint32_t, Breakpoint>> breakpoints_;

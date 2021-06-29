@@ -31,7 +31,7 @@ struct StackEntry {
   std::string function;
 };
 struct Status {
-  RunState runState;
+  RunState runState = RunState::Paused;
   std::vector<StackEntry> stack;
 };
 enum class VariableType {
@@ -98,45 +98,45 @@ class MessageCommandInterface {
 
   // Interface definition
 
-  /// <summary>
+  /// <summary> 
   /// Instructs the program to pause execution at its current point
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode pauseExecution() = 0;
+  [[nodiscard]] virtual data::ReturnCode PauseExecution() = 0;
 
   /// <summary>
   /// Instructs the program to resume execution if it was previously paused
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode continueExecution() = 0;
+  [[nodiscard]] virtual data::ReturnCode ContinueExecution() = 0;
 
   /// <summary>
   /// Instructs the program to execute until it pops 1 level up the stack if it was previously paused
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode stepOut() = 0;
+  [[nodiscard]] virtual data::ReturnCode StepOut() = 0;
 
   /// <summary>
   /// Instructs the program to execute until it reaches another line at this stack level
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode stepOver() = 0;
+  [[nodiscard]] virtual data::ReturnCode StepOver() = 0;
 
   /// <summary>
   /// Instructs the program to execute a single step if it was previously paused
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode stepIn() = 0;
+  [[nodiscard]] virtual data::ReturnCode StepIn() = 0;
 
   /// <summary>
   /// Instructs the program to send out current state: ie playing or paused.
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode sendStatus() = 0;
+  [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
 
-  [[nodiscard]] virtual data::ReturnCode getStackVariables(int32_t stackFrame, const std::string& path,
+  [[nodiscard]] virtual data::ReturnCode GetStackVariables(int32_t stackFrame, const std::string& path,
                                                            const data::PaginationInfo& pagination,
                                                            std::vector<data::Variable>& variables) = 0;
 
-  [[nodiscard]] virtual data::ReturnCode getGlobalVariables(const std::string& path,
+  [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(const std::string& path,
                                                             const data::PaginationInfo& pagination,
                                                             std::vector<data::Variable>& variables) = 0;
 
-  [[nodiscard]] virtual data::ReturnCode setFileBreakpoints(const std::string& file,
+  [[nodiscard]] virtual data::ReturnCode SetFileBreakpoints(const std::string& file,
                                                             const std::vector<data::CreateBreakpoint>& createBps,
                                                             std::vector<data::ResolvedBreakpoint>& resolvedBps) = 0;
 };
@@ -157,7 +157,7 @@ class MessageEventInterface {
   MessageEventInterface& operator=(MessageEventInterface&&) = delete;
 
   // Interface definition
-  virtual void onStatus(data::Status&& status) = 0;
+  virtual void HandleStatusChanged(data::Status&& status) = 0;
 };
 }// namespace sdb
 

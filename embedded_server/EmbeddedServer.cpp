@@ -33,9 +33,9 @@ namespace sdb {
 class OatMessageEventInterface : public MessageEventInterface {
  public:
   explicit OatMessageEventInterface(std::shared_ptr<WSInstanceListener> webSocketInstanceListener)
-      : webSocketInstanceListener_(webSocketInstanceListener) {}
+      : webSocketInstanceListener_(std::move(webSocketInstanceListener)) {}
 
-  void onStatus(data::Status&& status) override {
+  void HandleStatusChanged(data::Status&& status) override {
     const auto statusDto = dto::Status::createShared();
     statusDto->runstate = static_cast<sdb::dto::RunState>(status.runState);
     statusDto->stack = oatpp::List<oatpp::Object<dto::StackEntry>>::createShared();
@@ -62,7 +62,7 @@ class OatMessageEventInterface : public MessageEventInterface {
 class EndpointImpl : public EmbeddedServer {
 
  public:
-  void SetCommandInterface(std::shared_ptr<MessageCommandInterface> messageCommandInterface) override {
+  void SetCommandInterface(const std::shared_ptr<MessageCommandInterface> messageCommandInterface) override {
 
     /* create ApiControllers and add endpoints to router */
     appComponents_ = std::make_shared<AppComponents>();
@@ -93,7 +93,7 @@ class EndpointImpl : public EmbeddedServer {
     eventInterface_ = std::make_shared<OatMessageEventInterface>(appComponents_->webSocketInstanceListener_);
   }
 
-  std::shared_ptr<MessageEventInterface> GetEventInterface() const override {
+  [[nodiscard]] std::shared_ptr<MessageEventInterface> GetEventInterface() const override {
     return eventInterface_;
   }
 
@@ -107,22 +107,23 @@ class EndpointImpl : public EmbeddedServer {
       OATPP_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, connectionProvider);
       oatpp::network::Server server(connectionProvider, connectionHandler);
 
-      OATPP_LOGD(TAG, "Running on port %s...", connectionProvider->getProperty("port").toString()->c_str());
+      OATPP_LOGD(kTag, "Running on port %s...", connectionProvider->getProperty("port").toString()->c_str());
 
       server.run([stopping]() { return !*stopping; });
 
-      OATPP_LOGD(TAG, "Stopped");
+      OATPP_LOGD(kTag, "Stopped");
     });
   }
 
   // Stops the worker thread, optionally joining the thread until the stop has completed.
-  void Stop(bool join = true) override {
+  void Stop(const bool join) override {
     *stopping_ = true;
     if (join) {
       worker_.join();
     }
   }
 
+private:
   std::shared_ptr<OatMessageEventInterface> eventInterface_;
   std::shared_ptr<AppComponents> appComponents_;
 
@@ -132,7 +133,7 @@ class EndpointImpl : public EmbeddedServer {
 
   std::shared_ptr<bool> stopping_ = std::make_shared<bool>(false);
   std::thread worker_;
-  static constexpr const char* TAG = "Server_Endpoint";
+  static constexpr const char* kTag = "EmbeddedServer";
 };
 
 EmbeddedServer* EmbeddedServer::Create() {
@@ -147,13 +148,10 @@ void EmbeddedServer::InitEnvironment() {
 
 void EmbeddedServer::ShutdownEnvironment() {
   /* Print how much objects were created during app running, and what have left-probably leaked */
-  /* Disable object counting for release builds using '-D OATPP_DISABLE_ENV_OBJECT_COUNTERS' flag for better performance */
+  // TODO: Disable object counting for release builds using '-D OATPP_DISABLE_ENV_OBJECT_COUNTERS' flag for better performance
   {
-    auto logger = oatpp::base::Environment::getLogger();
-    auto pri = oatpp::base::Logger::PRIORITY_D;
-
     std::stringstream ss;
-    ss << "\nEnvironment:\n";
+    ss << "\nOATPP Environment:\n";
     ss << "objectsCount = " << oatpp::base::Environment::getObjectsCount() << "\n";
     ss << "objectsCreated = " << oatpp::base::Environment::getObjectsCreated() << "\n\n";
     OATPP_LOGD("Endpoint", ss.str().c_str());

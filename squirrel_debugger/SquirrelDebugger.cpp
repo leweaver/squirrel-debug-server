@@ -22,16 +22,18 @@ using sdb::data::StackEntry;
 using sdb::data::Status;
 using sdb::data::Variable;
 
-using sdb::sq::createChildVariable;
-using sdb::sq::createChildVariablesFromIterable;
+using sdb::sq::CreateChildVariable;
+using sdb::sq::CreateChildVariablesFromIterable;
 using sdb::sq::ScopedVerifySqTop;
 
 using LockGuard = std::lock_guard<std::recursive_mutex>;
 
 // Kinda just chosen arbitrarily - but if this isn't big enough, you should seriously consider changing your algorithm!
-const long long kMaxStackDepth = 100;
+const SQInteger kDefaultStackSize = 1024;
 
-namespace sdb {
+const char* const kLogTag = "SquirrelDebugger";
+
+namespace sdb::internal {
 struct PauseMutexDataImpl {
   bool isPaused = false;
 
@@ -46,7 +48,7 @@ struct PauseMutexDataImpl {
 };
 
 struct SquirrelVmDataImpl {
-  void populateStack(std::vector<StackEntry>& stack) const
+  void PopulateStack(std::vector<StackEntry>& stack) const
   {
     stack.clear();
 
@@ -58,7 +60,7 @@ struct SquirrelVmDataImpl {
     }
   }
 
-  ReturnCode populateStackVariables(
+  ReturnCode PopulateStackVariables(
           int32_t stackFrame, const std::string& path, const PaginationInfo& pagination,
           std::vector<Variable>& stack) const
   {
@@ -88,7 +90,7 @@ struct SquirrelVmDataImpl {
         Variable variable;
         variable.pathIterator = nSeq;
         variable.pathUiString = localName;
-        rc = createChildVariable(vm, variable);
+        rc = CreateChildVariable(vm, variable);
 
         // Remove local from stack
         sq_poptop(vm);
@@ -108,7 +110,7 @@ struct SquirrelVmDataImpl {
       }
 
       //variable.name = *(pathParts.end() - 1);
-      rc = createChildVariablesFromIterable(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
+      rc = CreateChildVariablesFromIterable(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
       if (rc != ReturnCode::Success) {
         SDB_LOGI(__FILE__, "Failed to find stack variables for path: %s", path.c_str());
       }
@@ -120,7 +122,7 @@ struct SquirrelVmDataImpl {
     return rc;
   }
   ReturnCode
-  populateGlobalVariables(const std::string& path, const PaginationInfo& pagination, std::vector<Variable>& stack) const
+  PopulateGlobalVariables(const std::string& path, const PaginationInfo& pagination, std::vector<Variable>& stack) const
   {
     ScopedVerifySqTop scopedVerify(vm);
 
@@ -136,7 +138,7 @@ struct SquirrelVmDataImpl {
     }
 
     sq_pushroottable(vm);
-    const ReturnCode rc = createChildVariablesFromIterable(vm, pathParts.begin(), pathParts.end(), pagination, stack);
+    const ReturnCode rc = CreateChildVariablesFromIterable(vm, pathParts.begin(), pathParts.end(), pagination, stack);
     sq_poptop(vm);
 
     return rc;
@@ -148,11 +150,9 @@ struct SquirrelVmDataImpl {
 
 }// namespace sdb
 
-constexpr char* kLogTag = "SquirrelDebugger";
-
 SquirrelDebugger::SquirrelDebugger()
-    : pauseMutexData_(new PauseMutexDataImpl())
-    , vmData_(new SquirrelVmDataImpl())
+    : pauseMutexData_(new internal::PauseMutexDataImpl())
+    , vmData_(new internal::SquirrelVmDataImpl())
 {
   SDB_LOGD(kLogTag, "Initialized");
   SDB_LOGD(kLogTag, "Initialized %s", "a thing");
@@ -164,18 +164,18 @@ SquirrelDebugger::~SquirrelDebugger()
   delete vmData_;
 }
 
-void SquirrelDebugger::setEventInterface(std::shared_ptr<MessageEventInterface> eventInterface)
+void SquirrelDebugger::SetEventInterface(std::shared_ptr<MessageEventInterface> eventInterface)
 {
   eventInterface_ = std::move(eventInterface);
 }
 
-void SquirrelDebugger::addVm(SQVM* const vm)
+void SquirrelDebugger::AddVm(SQVM* const vm)
 {
   // TODO: Multiple VM support
   vmData_->vm = vm;
 }
 
-ReturnCode SquirrelDebugger::pauseExecution()
+ReturnCode SquirrelDebugger::PauseExecution()
 {
   if (pauseRequested_ == PauseType::None) {
     std::lock_guard lock(pauseMutex_);
@@ -187,7 +187,7 @@ ReturnCode SquirrelDebugger::pauseExecution()
   return ReturnCode::Success;
 }
 
-ReturnCode SquirrelDebugger::continueExecution()
+ReturnCode SquirrelDebugger::ContinueExecution()
 {
   if (pauseRequested_ != PauseType::None) {
     std::lock_guard lock(pauseMutex_);
@@ -201,22 +201,22 @@ ReturnCode SquirrelDebugger::continueExecution()
   return ReturnCode::InvalidNotPaused;
 }
 
-ReturnCode SquirrelDebugger::stepOut()
+ReturnCode SquirrelDebugger::StepOut()
 {
   return Step(PauseType::StepOut, 1);
 }
 
-ReturnCode SquirrelDebugger::stepOver()
+ReturnCode SquirrelDebugger::StepOver()
 {
   return Step(PauseType::StepOver, 0);
 }
 
-ReturnCode SquirrelDebugger::stepIn()
+ReturnCode SquirrelDebugger::StepIn()
 {
   return Step(PauseType::StepIn, -1);
 }
 
-ReturnCode SquirrelDebugger::getStackVariables(
+ReturnCode SquirrelDebugger::GetStackVariables(
         int32_t stackFrame, const std::string& path, const data::PaginationInfo& pagination,
         std::vector<Variable>& variables)
 {
@@ -230,10 +230,10 @@ ReturnCode SquirrelDebugger::getStackVariables(
     SDB_LOGD(__FILE__, "cannot retrieve stack variables, requested stack frame exceeds current stack depth");
     return ReturnCode::InvalidParameter;
   }
-  return vmData_->populateStackVariables(stackFrame, path, pagination, variables);
+  return vmData_->PopulateStackVariables(stackFrame, path, pagination, variables);
 }
 
-ReturnCode SquirrelDebugger::getGlobalVariables(
+ReturnCode SquirrelDebugger::GetGlobalVariables(
         const std::string& path, const PaginationInfo& pagination, std::vector<Variable>& variables)
 {
   std::lock_guard lock(pauseMutex_);
@@ -242,10 +242,10 @@ ReturnCode SquirrelDebugger::getGlobalVariables(
     return ReturnCode::InvalidNotPaused;
   }
 
-  return vmData_->populateGlobalVariables(path, pagination, variables);
+  return vmData_->PopulateGlobalVariables(path, pagination, variables);
 }
 
-ReturnCode SquirrelDebugger::setFileBreakpoints(
+ReturnCode SquirrelDebugger::SetFileBreakpoints(
         const std::string& file, const std::vector<data::CreateBreakpoint>& createBps,
         std::vector<data::ResolvedBreakpoint>& resolvedBps)
 {
@@ -261,8 +261,8 @@ ReturnCode SquirrelDebugger::setFileBreakpoints(
   {
     std::lock_guard lock(pauseMutex_);
 
-    pauseMutexData_->breakpoints.clear(file);
-    pauseMutexData_->breakpoints.addAll(file, bps);
+    pauseMutexData_->breakpoints.Clear(file);
+    pauseMutexData_->breakpoints.AddAll(file, bps);
   }
 
   return ReturnCode::Success;
@@ -283,7 +283,7 @@ ReturnCode SquirrelDebugger::Step(PauseType pauseType, int returnsRequired)
   return ReturnCode::Success;
 }
 
-ReturnCode SquirrelDebugger::sendStatus()
+ReturnCode SquirrelDebugger::SendStatus()
 {
   // Don't allow un-pause while we read the status.
   Status status;
@@ -307,37 +307,35 @@ ReturnCode SquirrelDebugger::sendStatus()
     }
   }
 
-  eventInterface_->onStatus(std::move(status));
+  eventInterface_->HandleStatusChanged(std::move(status));
   return ReturnCode::Success;
 }
 
-void SquirrelDebugger::squirrelNativeDebugHook(
-        SQVM* const v, const SQInteger type, const SQChar* sourceName, const SQInteger line, const SQChar* functionName)
+void SquirrelDebugger::SquirrelNativeDebugHook(
+        SQVM* const /*v*/, const SQInteger type, const SQChar* sourceName, const SQInteger line,
+        const SQChar* /*functionName*/)
 {
-  auto& pauseMutexData = *pauseMutexData_;
-  auto& vmData = *vmData_;
-
   // 'c' called when a function has been called
   if (type == 'c') {
-    ++vmData.currentStackDepth;
-    assert(vmData.currentStackDepth < kMaxStackDepth);
+    ++vmData_->currentStackDepth;
+    assert(vmData_->currentStackDepth < kDefaultStackSize);
     if (pauseRequested_ != PauseType::None) {
       std::unique_lock lock(pauseMutex_);
       if (pauseRequested_ != PauseType::None) {
-        if (pauseMutexData.returnsRequired >= 0) {
-          ++pauseMutexData.returnsRequired;
+        if (pauseMutexData_->returnsRequired >= 0) {
+          ++pauseMutexData_->returnsRequired;
         }
       }
     }
     // 'r' called when a function returns
   }
   else if (type == 'r') {
-    --vmData.currentStackDepth;
-    assert(vmData.currentStackDepth >= 0);
+    --vmData_->currentStackDepth;
+    assert(vmData_->currentStackDepth >= 0);
     if (pauseRequested_ != PauseType::None) {
       std::unique_lock lock(pauseMutex_);
       if (pauseRequested_ != PauseType::None) {
-        --pauseMutexData.returnsRequired;
+        --pauseMutexData_->returnsRequired;
       }
     }
     // 'l' called every line(that contains some code)
@@ -349,32 +347,37 @@ void SquirrelDebugger::squirrelNativeDebugHook(
       Breakpoint bp;
       const std::string fileName{sourceName};
       if (line >= 0 && line < INT32_MAX &&
-          pauseMutexData_->breakpoints.readBreakpoint(fileName, static_cast<uint32_t>(line), bp))
+          pauseMutexData_->breakpoints.ReadBreakpoint(fileName, static_cast<uint32_t>(line), bp))
       {
         // right now, only support basic breakpoints so no further interrogation is needed.
         pauseRequested_ = PauseType::Pause;
       }
     }
 
-    if (pauseRequested_ != PauseType::None && pauseMutexData.returnsRequired <= 0) {
+    if (pauseRequested_ != PauseType::None && pauseMutexData_->returnsRequired <= 0) {
       std::unique_lock lock(pauseMutex_);
-      if (pauseRequested_ != PauseType::None && pauseMutexData.returnsRequired <= 0) {
-        pauseMutexData.isPaused = true;
+      if (pauseRequested_ != PauseType::None && pauseMutexData_->returnsRequired <= 0) {
+        pauseMutexData_->isPaused = true;
 
-        auto& status = pauseMutexData.status;
+        auto& status = pauseMutexData_->status;
         status.runState = RunState::Paused;
 
-        vmData.populateStack(status.stack);
+        vmData_->PopulateStack(status.stack);
 
         {
           Status statusCopy = status;
-          eventInterface_->onStatus(std::move(statusCopy));
+          eventInterface_->HandleStatusChanged(std::move(statusCopy));
         }
 
         // This Cv will be signaled whenever the value of pauseRequested_ changes.
         pauseCv_.wait(lock);
-        pauseMutexData.isPaused = false;
+        pauseMutexData_->isPaused = false;
       }
     }
   }
+}
+
+SQInteger SquirrelDebugger::DefaultStackSize()
+{
+  return kDefaultStackSize;
 }

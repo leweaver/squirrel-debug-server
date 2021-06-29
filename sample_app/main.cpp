@@ -33,24 +33,27 @@ using std::cerr;
 using std::cout;
 using std::endl;
 
-void compile() {}
+constexpr auto kPLogInstanceId = PLOG_DEFAULT_INSTANCE_ID;
 
 SQInteger File_LexFeedAscii(SQUserPointer file)
 {
-  char c;
-  if (fread(&c, sizeof(c), 1, static_cast<FILE*>(file)) > 0) return c;
+  char c = 0;
+  if (fread(&c, sizeof(c), 1, static_cast<FILE*>(file)) > 0) {
+    return c;
+  }
   return 0;
 }
 
-SQRESULT CompileFile(HSQUIRRELVM v, const char* filename)
+SQRESULT CompileFile(SQVM* const v, const char* filename)
 {
-  auto* f = fopen(filename, "rb");
-  if (f) {
-    const auto res = sq_compile(v, File_LexFeedAscii, f, filename, 1);
+  FILE* fpRaw = nullptr;
+  fopen_s(&fpRaw, filename, "rb");
+  if (fpRaw != nullptr) {
+    const std::unique_ptr<std::FILE, decltype(&std::fclose)> fp = {fpRaw, &std::fclose};
+    const auto res = sq_compile(v, File_LexFeedAscii, fp.get(), filename, 1);
     if (SQ_FAILED(res)) {
       cerr << "Failed to compile" << endl;
     }
-    fclose(f);
     return res;
   }
   cerr << "File doesn't exist" << endl;
@@ -96,16 +99,17 @@ std::vector<VmInfo> vms;
 std::mutex vmsMutex;
 
 void SquirrelNativeDebugHook(
-        HSQUIRRELVM v, SQInteger type, const SQChar* sourcename, SQInteger line, const SQChar* funcname)
+        SQVM* const v, const SQInteger type, const SQChar* sourceName, const SQInteger line,
+        const SQChar* const funcName)
 {
   auto iter = std::find_if(vms.begin(), vms.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
   assert(iter != vms.end());
-  iter->debugger->squirrelNativeDebugHook(v, type, sourcename, line, funcname);
+  iter->debugger->SquirrelNativeDebugHook(v, type, sourceName, line, funcName);
 }
 
-void run(std::shared_ptr<SquirrelDebugger> debugger)
+void Run(std::shared_ptr<SquirrelDebugger> debugger)
 {
-  HSQUIRRELVM v = sq_open(1024);//creates a VM with initial stack size 1024
+  HSQUIRRELVM v = sq_open(SquirrelDebugger::DefaultStackSize());
   {
     std::lock_guard lock(vmsMutex);
     vms.push_back({v, debugger});
@@ -114,16 +118,15 @@ void run(std::shared_ptr<SquirrelDebugger> debugger)
   // Forward squirrel print & errors to cout/cerr
   sq_setprintfunc(v, SquirrelPrintCallback, SquirrelPrintErrCallback);
 
-  // File to run
+  // File to Run
   const std::string fileName = R"(C:\repos\vscode-quirrel-debugger\sample_app\scripts\hello_world.nut)";
 
   // Enable debugging hooks
   if (debugger) {
-    debugger->addVm(v);
-    //if (ReturnCode::Success != debugger->Pause()) { cerr << "Failed to pause on startup." << endl; }
+    debugger->AddVm(v);
     const std::vector<sdb::data::CreateBreakpoint> bps{{0U, 43U}};
     std::vector<sdb::data::ResolvedBreakpoint> resolvedBps;
-    const auto rc = debugger->setFileBreakpoints(fileName, bps, resolvedBps);
+    const auto rc = debugger->SetFileBreakpoints(fileName, bps, resolvedBps);
     if (rc != ReturnCode::Success) {
       cerr << "Failed to set BP on startup";
     }
@@ -154,67 +157,106 @@ void run(std::shared_ptr<SquirrelDebugger> debugger)
 
   {
     std::lock_guard<std::mutex> lock(vmsMutex);
-    auto pos = std::find_if(vms.begin(), vms.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
-    auto last_pos = vms.end() - 1;
-    std::swap(*pos, *last_pos);
+    const auto pos = std::find_if(vms.begin(), vms.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
+    const auto lastPos = vms.end() - 1;
+    std::swap(*pos, *lastPos);
     vms.pop_back();
   }
 }
 
 namespace sdb::log {
-std::array<plog::Severity, 5> kLevelToSeverity = {plog::verbose, plog::debug, plog::info, plog::warning, plog::error};
-void logFormatted(const char* tag, const size_t line, const Level level, const char* message, ...)
+const std::array<plog::Severity, 5> kLevelToSeverity = {plog::verbose, plog::debug, plog::info, plog::warning, plog::error};
+void LogFormatted(const char* tag, const size_t line, const Level level, const char* message, ...)
 {
-  constexpr auto instanceId = PLOG_DEFAULT_INSTANCE_ID;
   const auto severity = kLevelToSeverity.at(static_cast<std::size_t>(level));
   IF_PLOG_(PLOG_DEFAULT_INSTANCE_ID, severity)
   {
     va_list ap;
     va_start(ap, message);
 
-    char* str = NULL;
+    char* str = nullptr;
     int len = plog::util::vasprintf(&str, message, ap);
     static_cast<void>(len);
     va_end(ap);
-    *plog::get<instanceId>() +=
-            plog::Record(severity, tag, line, PLOG_GET_FILE(), PLOG_GET_THIS(), instanceId).ref() << str;
+    *plog::get<kPLogInstanceId>() +=
+            plog::Record(severity, tag, line, PLOG_GET_FILE(), PLOG_GET_THIS(), kPLogInstanceId).ref() << str;
 
     free(str);
   }
 }
-void logString(const char* tag, const size_t line, const Level level, const char* str)
+void LogString(const char* tag, const size_t line, const Level level, const char* str)
 {
-  constexpr auto instanceId = PLOG_DEFAULT_INSTANCE_ID;
   const auto severity = kLevelToSeverity.at(static_cast<std::size_t>(level));
   IF_PLOG_(PLOG_DEFAULT_INSTANCE_ID, severity)
   {
-    *plog::get<instanceId>() += plog::Record(severity, tag, line, PLOG_GET_FILE(), PLOG_GET_THIS(), instanceId).ref()
-                                << str;
+    *plog::get<kPLogInstanceId>() +=
+            plog::Record(severity, tag, line, PLOG_GET_FILE(), PLOG_GET_THIS(), kPLogInstanceId).ref() << str;
   }
 }
 }// namespace sdb::log
 
+template<typename T> void WrapWithTries(bool& ioShouldContinue, T& oStream, const char* failMessageDetail, const std::function<void()>& fn)
+{
+  if (!ioShouldContinue) {
+    return;
+  }
+  try {
+    fn();
+  }
+  catch (const std::exception& e) {
+    try {
+      oStream << "Uncaught exception (" << failMessageDetail << "): " << e.what();
+    }
+    catch (...) {
+    }
+    ioShouldContinue = false;
+  }
+  catch (...) {
+    try {
+      oStream << "Failed to initialize logger (" << failMessageDetail << ")";
+    }
+    catch (...) {
+    }
+    ioShouldContinue = false;
+  }
+}
+
 int main(int argc, char* argv[])
 {
-  static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
-  plog::init(plog::verbose, &consoleAppender);
+  std::unique_ptr<EmbeddedServer> ep;
+  std::shared_ptr<SquirrelDebugger> debugger;
 
-  EmbeddedServer::InitEnvironment();
+  bool shouldContinue = true;
 
-  std::unique_ptr<EmbeddedServer> ep(EmbeddedServer::Create());
-  auto debugger = std::make_shared<SquirrelDebugger>();
+  WrapWithTries(shouldContinue, cerr, "Initializing Logger", [&]() {
+    // plog requires that appenders are static, thus destroyed at exit time.
+    static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;  // NOLINT(clang-diagnostic-exit-time-destructors)
+    plog::init(plog::verbose, &consoleAppender);
+  });
 
-  ep->SetCommandInterface(debugger);
-  debugger->setEventInterface(ep->GetEventInterface());
+  WrapWithTries(shouldContinue, cerr, "Initializing Environment", [&]() {
+    EmbeddedServer::InitEnvironment();
+    ep.reset(EmbeddedServer::Create());
 
-  ep->Start();
+    debugger = std::make_shared<SquirrelDebugger>();
+    ep->SetCommandInterface(debugger);
+    debugger->SetEventInterface(ep->GetEventInterface());
 
-  run(debugger);
+    ep->Start();
+  });
 
-  ep->Stop(true);
-  ep.reset();
+  WrapWithTries(shouldContinue, cerr, "Running", [&]() {
+    Run(debugger);
+  });
 
-  EmbeddedServer::ShutdownEnvironment();
+  WrapWithTries(shouldContinue, cerr, "Teardown", [&]() {
+    if (ep != nullptr) {
+      ep->Stop(true);
+      ep.reset();
+    }
 
-  return 0;
+    EmbeddedServer::ShutdownEnvironment();
+  });
+
+  return shouldContinue ? 0 : 1;
 }

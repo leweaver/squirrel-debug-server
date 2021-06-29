@@ -41,31 +41,31 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     return std::make_shared<DebugCommandController>(std::move(messageCommandInterface), objectMapper);
   }
 
-  ENDPOINT("PUT", "SendStatus", sendStatus) { return createReturnCodeResponse(messageCommandInterface_->sendStatus()); }
+  ENDPOINT("PUT", "SendStatus", sendStatus) { return createReturnCodeResponse(messageCommandInterface_->SendStatus()); }
   ENDPOINT_INFO(sendStatus) { addCommandMessageResponse(info); }
 
-  ENDPOINT("PUT", "StepOut", stepOut) { return createReturnCodeResponse(messageCommandInterface_->stepOut()); }
+  ENDPOINT("PUT", "StepOut", stepOut) { return createReturnCodeResponse(messageCommandInterface_->StepOut()); }
   ENDPOINT_INFO(stepOut)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
   }
 
-  ENDPOINT("PUT", "StepOver", stepOver) { return createReturnCodeResponse(messageCommandInterface_->stepOver()); }
+  ENDPOINT("PUT", "StepOver", stepOver) { return createReturnCodeResponse(messageCommandInterface_->StepOver()); }
   ENDPOINT_INFO(stepOver)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
   }
 
-  ENDPOINT("PUT", "StepIn", stepIn) { return createReturnCodeResponse(messageCommandInterface_->stepIn()); }
+  ENDPOINT("PUT", "StepIn", stepIn) { return createReturnCodeResponse(messageCommandInterface_->StepIn()); }
   ENDPOINT_INFO(stepIn)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
   }
 
-  ENDPOINT("PUT", "Pause", pause) { return createReturnCodeResponse(messageCommandInterface_->pauseExecution()); }
+  ENDPOINT("PUT", "Pause", pause) { return createReturnCodeResponse(messageCommandInterface_->PauseExecution()); }
   ENDPOINT_INFO(pause) { info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json"); }
 
-  ENDPOINT("PUT", "Continue", cont) { return createReturnCodeResponse(messageCommandInterface_->continueExecution()); }
+  ENDPOINT("PUT", "Continue", cont) { return createReturnCodeResponse(messageCommandInterface_->ContinueExecution()); }
   ENDPOINT_INFO(cont) { info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json"); }
 
   ENDPOINT("GET", "Variables/Local/{stackFrame}", stackLocals, PATH(Int32, stackFrame), QUERY(String, path),
@@ -73,7 +73,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   {
     return handleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
       std::vector<data::Variable> variables;
-      return std::tuple(messageCommandInterface_->getStackVariables(stackFrame, path->std_str(), pagination, variables),
+      return std::tuple(messageCommandInterface_->GetStackVariables(stackFrame, path->std_str(), pagination, variables),
                         variables);
     });
   }
@@ -88,7 +88,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   {
     return handleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
       std::vector<data::Variable> variables;
-      return std::tuple(messageCommandInterface_->getGlobalVariables(path->std_str(), pagination, variables),
+      return std::tuple(messageCommandInterface_->GetGlobalVariables(path->std_str(), pagination, variables),
                         variables);
     });
   }
@@ -107,17 +107,17 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
 
     std::vector<data::ResolvedBreakpoint> resolvedBpList;
     const data::ReturnCode rc =
-            messageCommandInterface_->setFileBreakpoints(std::string(file->c_str()), bpList, resolvedBpList);
+            messageCommandInterface_->SetFileBreakpoints(std::string(file->c_str()), bpList, resolvedBpList);
     if (rc != data::ReturnCode::Success) { return createReturnCodeResponse(rc); }
 
     const auto resolvedBpListDto = dto::ResolvedBreakpointListResponse::createShared();
     resolvedBpListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
     resolvedBpListDto->breakpoints = List<Object<dto::ResolvedBreakpoint>>::createShared();
-    for (const auto& resolvedBp : resolvedBpList) {
+    for (const auto [id, line, resolved] : resolvedBpList) {
       auto resolvedBpDto = Object<dto::ResolvedBreakpoint>::createShared();
-      resolvedBpDto->id = resolvedBp.id;
-      resolvedBpDto->line = resolvedBp.line;
-      resolvedBpDto->resolved = resolvedBp.resolved;
+      resolvedBpDto->id = id;
+      resolvedBpDto->line = line;
+      resolvedBpDto->resolved = resolved;
       resolvedBpListDto->breakpoints->emplace_back(std::move(resolvedBpDto));
     }
 

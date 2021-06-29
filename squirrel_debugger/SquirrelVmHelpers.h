@@ -14,14 +14,14 @@
 #include <string>
 
 namespace sdb::sq {
-const char* toSqObjectTypeName(SQObjectType sqType);
-data::VariableType toVariableType(SQObjectType sqType);
+const char* ToSqObjectTypeName(SQObjectType sqType);
+data::VariableType ToVariableType(SQObjectType sqType);
 
-std::string classFullName(HSQUIRRELVM v, SQInteger idx);
-std::string toString(HSQUIRRELVM v, SQInteger idx);
+std::string ToClassFullName(HSQUIRRELVM v, SQInteger idx);
+std::string ToString(HSQUIRRELVM v, SQInteger idx);
 
-data::ReturnCode createChildVariable(HSQUIRRELVM v, data::Variable& variable);
-data::ReturnCode createChildVariablesFromIterable(
+data::ReturnCode CreateChildVariable(HSQUIRRELVM v, data::Variable& variable);
+data::ReturnCode CreateChildVariablesFromIterable(
         HSQUIRRELVM v, std::vector<uint64_t>::const_iterator pathBegin, std::vector<uint64_t>::const_iterator pathEnd,
         const data::PaginationInfo& pagination, std::vector<data::Variable>& variables);
 

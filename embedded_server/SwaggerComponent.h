@@ -21,15 +21,18 @@ class SwaggerComponent {
     oatpp::swagger::DocumentInfo::Builder builder;
 
     builder
-            .setTitle("User entity service")
-            .setDescription("CRUD API Example project with swagger docs")
+            .setTitle("Squirrel Remote Debugging")
+            .setDescription("HTTP command and WebSocket event interface to Squirrel Debugger.")
             .setVersion("1.0")
-            .setContactName("Ivan Ovsyanochka")
-            .setContactUrl("https://oatpp.io/")
+            .setContactName("Lewis Weaver")
+             // TODO: Set github URL
+            .setContactUrl("")
 
+            // TODO: Set MIT license
             .setLicenseName("Apache License, Version 2.0")
             .setLicenseUrl("http://www.apache.org/licenses/LICENSE-2.0")
 
+            // TODO: More intelligently set server and port
             .addServer("http://localhost:8000", "server on localhost");
 
     return builder.build();
