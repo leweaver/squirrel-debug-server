@@ -19,12 +19,12 @@ class StaticController final : public oatpp::web::server::api::ApiController {
   explicit StaticController(const std::shared_ptr<ObjectMapper>& objectMapper) : ApiController(objectMapper) {}
 
   static std::shared_ptr<StaticController>
-  createShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>, objectMapper)
+  CreateShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>, objectMapper)
   ) {
     return std::make_shared<StaticController>(objectMapper);
   }
 
-  ENDPOINT("GET", "/", root) {
+  ENDPOINT("GET", "/", Root) {
     const char* html = "<html lang='en'>"
                        "  <head>"
                        "    <meta charset=utf-8/>"

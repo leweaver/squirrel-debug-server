@@ -72,17 +72,17 @@ class EndpointImpl : public EmbeddedServer {
     // Controllers
     std::shared_ptr<oatpp::web::server::api::ApiController::Endpoints> docEndpoints = oatpp::swagger::Controller::Endpoints::createShared();
 
-    auto debugCommandController = DebugCommandController::createShared(messageCommandInterface);
+    auto debugCommandController = DebugCommandController::CreateShared(messageCommandInterface);
     debugCommandController->addEndpointsToRouter(router);
     docEndpoints->pushBackAll(debugCommandController->getEndpoints());
     controllers_.push_back(debugCommandController);
 
-    auto staticController = StaticController::createShared();
+    auto staticController = StaticController::CreateShared();
     staticController->addEndpointsToRouter(router);
     docEndpoints->pushBackAll(staticController->getEndpoints());
     controllers_.push_back(staticController);
 
-    auto websocketController = WebsocketController::createShared();
+    auto websocketController = WebsocketController::CreateShared();
     websocketController->addEndpointsToRouter(router);
     docEndpoints->pushBackAll(websocketController->getEndpoints());
     controllers_.push_back(websocketController);
@@ -90,7 +90,7 @@ class EndpointImpl : public EmbeddedServer {
     swaggerController_ = oatpp::swagger::Controller::createShared(docEndpoints);
     swaggerController_->addEndpointsToRouter(router);
 
-    eventInterface_ = std::make_shared<OatMessageEventInterface>(appComponents_->webSocketInstanceListener_);
+    eventInterface_ = std::make_shared<OatMessageEventInterface>(appComponents_->webSocketInstanceListener);
   }
 
   [[nodiscard]] std::shared_ptr<MessageEventInterface> GetEventInterface() const override {

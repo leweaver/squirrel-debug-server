@@ -27,10 +27,9 @@ const uint32_t kDefaultPort = 8000U;
  *  Class which creates and holds Application components and registers components in oatpp::base::Environment
  *  Order of components initialization is from top to bottom
  */
-class AppComponents {
- public:
+struct AppComponents {
   explicit AppComponents()
-      : webSocketInstanceListener_(CreateWebSocketInstanceListener()), webSocketConnectionHandler_(CreateWebSocketConnectionHandler(webSocketInstanceListener_)) {
+      : webSocketInstanceListener(CreateWebSocketInstanceListener()), webSocketConnectionHandler(CreateWebSocketConnectionHandler(webSocketInstanceListener)) {
   }
 
   static oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>
@@ -48,13 +47,11 @@ class AppComponents {
   /*
    *  Swagger component
    */
-  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   SwaggerComponent swaggerComponent;
 
   /*
    *  Create ConnectionProvider component which listens on the port
    */
-  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, serverConnectionProvider)
   ([] {
     return oatpp::network::tcp::server::ConnectionProvider::createShared({kDefaultHostname, kDefaultPort, oatpp::network::Address::IP_4});
@@ -63,7 +60,6 @@ class AppComponents {
   /*
    *  Create Router component
    */
-  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, httpRouter)
   ([] {
     return oatpp::web::server::HttpRouter::createShared();
@@ -72,7 +68,6 @@ class AppComponents {
   /*
    *  Create http ConnectionHandler
    */
-  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, httpConnectionHandler)
   ("http" /* qualifier */, [] {
     OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, router);// get Router component
@@ -82,17 +77,15 @@ class AppComponents {
   /*
    * Create ObjectMapper component to serialize/deserialize DTOs in Controller's API
    */
-  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::data::mapping::ObjectMapper>, apiObjectMapper)
   ([] {
     auto objectMapper = oatpp::parser::json::mapping::ObjectMapper::createShared();
     objectMapper->getDeserializer()->getConfig()->allowUnknownFields = false;
     return objectMapper;
   }());
-
-private:
-  std::shared_ptr<WSInstanceListener> webSocketInstanceListener_;
-  oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler_;
+  
+  std::shared_ptr<WSInstanceListener> webSocketInstanceListener;
+  oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler;
 };
 }// namespace sdb
 

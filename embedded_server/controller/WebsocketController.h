@@ -19,12 +19,12 @@ class WebsocketController final : public oatpp::web::server::api::ApiController 
  public:
   WebsocketController(const std::shared_ptr<ObjectMapper>& objectMapper) : ApiController(objectMapper) {}
 
-  static std::shared_ptr<WebsocketController> createShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>,
+  static std::shared_ptr<WebsocketController> CreateShared(OATPP_COMPONENT(std::shared_ptr<ObjectMapper>,
                                                                            objectMapper)) {
     return std::make_shared<WebsocketController>(objectMapper);
   }
 
-  ENDPOINT("GET", "ws", ws, REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+  ENDPOINT("GET", "ws", WebSocket, REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     return oatpp::websocket::Handshaker::serversideHandshake(request->getHeaders(), websocketConnectionHandler_);
   };
 

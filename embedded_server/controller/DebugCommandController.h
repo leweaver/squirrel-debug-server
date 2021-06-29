@@ -27,88 +27,123 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
           const data::PaginationInfo& pagination)>;
 
  public:
-  DebugCommandController(std::shared_ptr<MessageCommandInterface> messageCommandInterface,
-                         const std::shared_ptr<ObjectMapper>& objectMapper)
+  DebugCommandController(
+          std::shared_ptr<MessageCommandInterface> messageCommandInterface,
+          const std::shared_ptr<ObjectMapper>& objectMapper)
       : ApiController(objectMapper, "DebugCommand/")
       , messageCommandInterface_(std::move(messageCommandInterface))
-      , commandOkResponse_(createCommandOkResponse())
+      , commandOkResponse_(CreateCommandOkResponse())
   {}
 
-  static std::shared_ptr<DebugCommandController>
-  createShared(std::shared_ptr<MessageCommandInterface> messageCommandInterface,
-               OATPP_COMPONENT(std::shared_ptr<ObjectMapper>, objectMapper))
+  static std::shared_ptr<DebugCommandController> CreateShared(
+          std::shared_ptr<MessageCommandInterface> messageCommandInterface,
+          OATPP_COMPONENT(std::shared_ptr<ObjectMapper>, objectMapper))
   {
     return std::make_shared<DebugCommandController>(std::move(messageCommandInterface), objectMapper);
   }
 
-  ENDPOINT("PUT", "SendStatus", sendStatus) { return createReturnCodeResponse(messageCommandInterface_->SendStatus()); }
-  ENDPOINT_INFO(sendStatus) { addCommandMessageResponse(info); }
+  ENDPOINT("PUT", "SendStatus", SendStatus)
+  {
+    return CreateReturnCodeResponse(messageCommandInterface_->SendStatus());
+  }
+  ENDPOINT_INFO(SendStatus)
+  {
+    AddCommandMessageResponse(info);
+  }
 
-  ENDPOINT("PUT", "StepOut", stepOut) { return createReturnCodeResponse(messageCommandInterface_->StepOut()); }
-  ENDPOINT_INFO(stepOut)
+  ENDPOINT("PUT", "StepOut", StepOut)
+  {
+    return CreateReturnCodeResponse(messageCommandInterface_->StepOut());
+  }
+  ENDPOINT_INFO(StepOut)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
   }
 
-  ENDPOINT("PUT", "StepOver", stepOver) { return createReturnCodeResponse(messageCommandInterface_->StepOver()); }
-  ENDPOINT_INFO(stepOver)
+  ENDPOINT("PUT", "StepOver", StepOver)
+  {
+    return CreateReturnCodeResponse(messageCommandInterface_->StepOver());
+  }
+  ENDPOINT_INFO(StepOver)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
   }
 
-  ENDPOINT("PUT", "StepIn", stepIn) { return createReturnCodeResponse(messageCommandInterface_->StepIn()); }
-  ENDPOINT_INFO(stepIn)
+  ENDPOINT("PUT", "StepIn", StepIn)
+  {
+    return CreateReturnCodeResponse(messageCommandInterface_->StepIn());
+  }
+  ENDPOINT_INFO(StepIn)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
   }
 
-  ENDPOINT("PUT", "Pause", pause) { return createReturnCodeResponse(messageCommandInterface_->PauseExecution()); }
-  ENDPOINT_INFO(pause) { info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json"); }
-
-  ENDPOINT("PUT", "Continue", cont) { return createReturnCodeResponse(messageCommandInterface_->ContinueExecution()); }
-  ENDPOINT_INFO(cont) { info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json"); }
-
-  ENDPOINT("GET", "Variables/Local/{stackFrame}", stackLocals, PATH(Int32, stackFrame), QUERY(String, path),
-           QUERIES(QueryParams, queryParams))
+  ENDPOINT("PUT", "Pause", Pause)
   {
-    return handleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
+    return CreateReturnCodeResponse(messageCommandInterface_->PauseExecution());
+  }
+  ENDPOINT_INFO(Pause)
+  {
+    info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
+  }
+
+  ENDPOINT("PUT", "Continue", Continue)
+  {
+    return CreateReturnCodeResponse(messageCommandInterface_->ContinueExecution());
+  }
+  ENDPOINT_INFO(Continue)
+  {
+    info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
+  }
+
+  ENDPOINT(
+          "GET", "Variables/Local/{stackFrame}", StackLocals, PATH(Int32, stackFrame), QUERY(String, path),
+          QUERIES(QueryParams, queryParams))
+  {
+    return HandleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
       std::vector<data::Variable> variables;
-      return std::tuple(messageCommandInterface_->GetStackVariables(stackFrame, path->std_str(), pagination, variables),
-                        variables);
+      return std::tuple(
+              messageCommandInterface_->GetStackVariables(stackFrame, path->std_str(), pagination, variables),
+              variables);
     });
   }
-  ENDPOINT_INFO(stackLocals)
+  ENDPOINT_INFO(StackLocals)
   {
     info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
-    addCommandMessagePaginationParams(info);
-    addCommandMessageErrorResponses(info);
+    AddCommandMessagePaginationParams(info);
+    AddCommandMessageErrorResponses(info);
   }
 
-  ENDPOINT("GET", "Variables/Global", stackGlobals, QUERY(String, path), QUERIES(QueryParams, queryParams))
+  ENDPOINT("GET", "Variables/Global", StackGlobals, QUERY(String, path), QUERIES(QueryParams, queryParams))
   {
-    return handleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
+    return HandleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
       std::vector<data::Variable> variables;
-      return std::tuple(messageCommandInterface_->GetGlobalVariables(path->std_str(), pagination, variables),
-                        variables);
+      return std::tuple(
+              messageCommandInterface_->GetGlobalVariables(path->std_str(), pagination, variables), variables);
     });
   }
-  ENDPOINT_INFO(stackGlobals)
+  ENDPOINT_INFO(StackGlobals)
   {
     info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
-    addCommandMessagePaginationParams(info);
-    addCommandMessageErrorResponses(info);
+    AddCommandMessagePaginationParams(info);
+    AddCommandMessageErrorResponses(info);
   }
 
-  ENDPOINT("PUT", "FileBreakpoints/{file}", fileBreakpoints, PATH(String, file),
-           BODY_DTO(List<Object<dto::CreateBreakpoint>>, createBpList))
+  ENDPOINT(
+          "PUT", "FileBreakpoints/{file}", FileBreakpoints, PATH(String, file),
+          BODY_DTO(List<Object<dto::CreateBreakpoint>>, createBpList))
   {
     std::vector<data::CreateBreakpoint> bpList;
-    for (const auto& bpDto : *createBpList) { bpList.emplace_back(data::CreateBreakpoint{bpDto->id, bpDto->line}); }
+    for (const auto& bpDto : *createBpList) {
+      bpList.emplace_back(data::CreateBreakpoint{bpDto->id, bpDto->line});
+    }
 
     std::vector<data::ResolvedBreakpoint> resolvedBpList;
     const data::ReturnCode rc =
             messageCommandInterface_->SetFileBreakpoints(std::string(file->c_str()), bpList, resolvedBpList);
-    if (rc != data::ReturnCode::Success) { return createReturnCodeResponse(rc); }
+    if (rc != data::ReturnCode::Success) {
+      return CreateReturnCodeResponse(rc);
+    }
 
     const auto resolvedBpListDto = dto::ResolvedBreakpointListResponse::createShared();
     resolvedBpListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
@@ -123,24 +158,24 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
 
     return createDtoResponse(Status::CODE_200, resolvedBpListDto);
   }
-  ENDPOINT_INFO(fileBreakpoints)
+  ENDPOINT_INFO(FileBreakpoints)
   {
     info->addResponse<Object<dto::ResolvedBreakpointListResponse>>(Status::CODE_200, "application/json");
-    addCommandMessageErrorResponses(info);
+    AddCommandMessageErrorResponses(info);
   }
 
  private:
-  static void addCommandMessageResponse(const std::shared_ptr<Endpoint::Info>& info)
+  static void AddCommandMessageResponse(const std::shared_ptr<Endpoint::Info>& info)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_200, "application/json");
-    addCommandMessageErrorResponses(info);
+    AddCommandMessageErrorResponses(info);
   }
-  static void addCommandMessageErrorResponses(const std::shared_ptr<Endpoint::Info>& info)
+  static void AddCommandMessageErrorResponses(const std::shared_ptr<Endpoint::Info>& info)
   {
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_400, "application/json");
     info->addResponse<Object<dto::CommandMessageResponse>>(Status::CODE_500, "application/json");
   }
-  static void addCommandMessagePaginationParams(const std::shared_ptr<Endpoint::Info>& info)
+  static void AddCommandMessagePaginationParams(const std::shared_ptr<Endpoint::Info>& info)
   {
     auto& beginIteratorParam = info->queryParams.add<UInt32>("beginIterator");
     beginIteratorParam.required = false;
@@ -151,8 +186,8 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     countParam.description = "Count of items for pagination. Count must be at most 1000.";
   }
 
-  [[nodiscard]] static bool parseQueryParamWithDefault(const QueryParams& queryParams, const char* name,
-                                                       uint32_t defaultValue, uint32_t& parsedValue)
+  [[nodiscard]] static bool ParseQueryParamWithDefault(
+          const QueryParams& queryParams, const char* name, const uint32_t defaultValue, uint32_t& parsedValue)
   {
     const auto paramValueStr = queryParams.get(name);
     if (paramValueStr == nullptr || paramValueStr->getSize() == 0) {
@@ -165,25 +200,29 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     return !ss.fail();
   }
 
-  std::shared_ptr<OutgoingResponse> handleVariablesCommandMessage(const QueryParams& queryParams,
-                                                                  const VariablesCallback& getVariablesFn) const
+  [[nodiscard]] std::shared_ptr<OutgoingResponse>
+  HandleVariablesCommandMessage(const QueryParams& queryParams, const VariablesCallback& getVariablesFn) const
   {
     data::PaginationInfo pagination = {};
-    const bool validParams = parseQueryParamWithDefault(queryParams, "beginIterator", 0U, pagination.beginIterator) &&
-                             parseQueryParamWithDefault(queryParams, "count", 100U, pagination.count) &&
+    const bool validParams = ParseQueryParamWithDefault(queryParams, "beginIterator", 0U, pagination.beginIterator) &&
+                             ParseQueryParamWithDefault(queryParams, "count", 100U, pagination.count) &&
                              pagination.count <= 1000U;
-    if (!validParams) { return createReturnCodeResponse(data::ReturnCode::InvalidParameter); }
+    if (!validParams) {
+      return CreateReturnCodeResponse(data::ReturnCode::InvalidParameter);
+    }
 
     const auto [ret, variables] = getVariablesFn(pagination);
-    if (ret != data::ReturnCode::Success) { return createReturnCodeResponse(ret); }
+    if (ret != data::ReturnCode::Success) {
+      return CreateReturnCodeResponse(ret);
+    }
 
     const auto varListDto = dto::VariableList::createShared();
-    varListDto->variables = createVariablesList(variables);
+    varListDto->variables = CreateVariablesList(variables);
     varListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
     return createDtoResponse(Status::CODE_200, varListDto);
   }
 
-  static List<Object<dto::Variable>> createVariablesList(const std::vector<data::Variable>& variables)
+  [[nodiscard]] static List<Object<dto::Variable>> CreateVariablesList(const std::vector<data::Variable>& variables)
   {
     auto variablesDto = List<Object<dto::Variable>>::createShared();
     for (const auto& variable : variables) {
@@ -196,24 +235,26 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
       variableDto->value = String(variable.value.c_str(), static_cast<v_buff_size>(variable.value.size()), false);
       variableDto->valueRawAddress = variable.valueRawAddress;
       variableDto->childCount = variable.childCount;
-      variableDto->instanceClassName = String(variable.instanceClassName.c_str(),
-                                              static_cast<v_buff_size>(variable.instanceClassName.size()), false);
+      variableDto->instanceClassName = String(
+              variable.instanceClassName.c_str(), static_cast<v_buff_size>(variable.instanceClassName.size()), false);
 
       variablesDto->emplace_back(std::move(variableDto));
     }
     return variablesDto;
   }
 
-  std::shared_ptr<OutgoingResponse> createCommandOkResponse() const
+  [[nodiscard]] std::shared_ptr<OutgoingResponse> CreateCommandOkResponse() const
   {
     auto responseDto = dto::CommandMessageResponse::createShared();
     responseDto->code = 0;
     return createDtoResponse(Status::CODE_200, responseDto);
   }
 
-  std::shared_ptr<OutgoingResponse> createReturnCodeResponse(const data::ReturnCode returnCode) const
+  [[nodiscard]] std::shared_ptr<OutgoingResponse> CreateReturnCodeResponse(const data::ReturnCode returnCode) const
   {
-    if (returnCode == data::ReturnCode::Success) { return commandOkResponse_; }
+    if (returnCode == data::ReturnCode::Success) {
+      return commandOkResponse_;
+    }
 
     auto responseDto = dto::CommandMessageResponse::createShared();
     responseDto->code = static_cast<int32_t>(returnCode);
