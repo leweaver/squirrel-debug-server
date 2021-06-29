@@ -24,17 +24,37 @@ enum class ReturnCode {
   // Error means something went wrong inside the implementation, not good.
   ErrorInternal = 200
 };
-enum class Runstate { Running = 0, Pausing = 1, Paused = 2, Stepping = 3 };
+enum class RunState { Running = 0, Pausing = 1, Paused = 2, Stepping = 3 };
 struct StackEntry {
   std::string file;
   int64_t line;
   std::string function;
 };
 struct Status {
-  Runstate runstate;
+  RunState runState;
   std::vector<StackEntry> stack;
 };
-enum class VariableType { String, Bool, Integer, Float, Closure, Class, Instance, Array, Table, Other, Null };
+enum class VariableType {
+  Null,
+  Integer,
+  Float,
+  Bool,
+  String,
+  Table,
+  Array,
+  UserData,
+  Closure,
+  NativeClosure,
+  Generator,
+  UserPointer,
+  Thread,
+  FuncProto,
+  Class,
+  Instance,
+  WeakRef,
+  Outer
+};
+
 struct Variable {
   uint64_t pathIterator = 0;
   std::string pathUiString;
@@ -50,59 +70,94 @@ struct PaginationInfo {
   uint32_t beginIterator;
   uint32_t count;
 };
+struct CreateBreakpoint {
+  uint64_t id;
+  uint32_t line;
+};
+struct ResolvedBreakpoint {
+  uint64_t id;
+  uint32_t line;
+  bool resolved;
+};
 }// namespace data
 
 /// <summary>
 /// Interface that is used to communicate commands from the remote debugger
-/// Implemention is provided by the application.
+/// Implementation is provided by the application.
 /// </summary>
 class MessageCommandInterface {
  public:
+  MessageCommandInterface() = default;
+  virtual ~MessageCommandInterface() = default;
+
+  // Deleted methods
+  MessageCommandInterface(const MessageCommandInterface& other) = delete;
+  MessageCommandInterface(const MessageCommandInterface&& other) = delete;
+  MessageCommandInterface& operator=(const MessageCommandInterface&) = delete;
+  MessageCommandInterface& operator=(MessageCommandInterface&&) = delete;
+
+  // Interface definition
+
   /// <summary>
   /// Instructs the program to pause execution at its current point
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode Pause() = 0;
+  [[nodiscard]] virtual data::ReturnCode pauseExecution() = 0;
 
   /// <summary>
   /// Instructs the program to resume execution if it was previously paused
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode Continue() = 0;
+  [[nodiscard]] virtual data::ReturnCode continueExecution() = 0;
 
   /// <summary>
   /// Instructs the program to execute until it pops 1 level up the stack if it was previously paused
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode StepOut() = 0;
+  [[nodiscard]] virtual data::ReturnCode stepOut() = 0;
 
   /// <summary>
   /// Instructs the program to execute until it reaches another line at this stack level
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode StepOver() = 0;
+  [[nodiscard]] virtual data::ReturnCode stepOver() = 0;
 
   /// <summary>
   /// Instructs the program to execute a single step if it was previously paused
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode StepIn() = 0;
+  [[nodiscard]] virtual data::ReturnCode stepIn() = 0;
 
   /// <summary>
   /// Instructs the program to send out current state: ie playing or paused.
   /// </summary>
-  [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
+  [[nodiscard]] virtual data::ReturnCode sendStatus() = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetStackVariables(int32_t stackFrame, const std::string& path,
-                                                        const data::PaginationInfo& pagination,
-                                                        std::vector<data::Variable>& variables) = 0;
+  [[nodiscard]] virtual data::ReturnCode getStackVariables(int32_t stackFrame, const std::string& path,
+                                                           const data::PaginationInfo& pagination,
+                                                           std::vector<data::Variable>& variables) = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(const std::string& path, const data::PaginationInfo& pagination,
-                                                    std::vector<data::Variable>& variables) = 0;
+  [[nodiscard]] virtual data::ReturnCode getGlobalVariables(const std::string& path,
+                                                            const data::PaginationInfo& pagination,
+                                                            std::vector<data::Variable>& variables) = 0;
+
+  [[nodiscard]] virtual data::ReturnCode setFileBreakpoints(const std::string& file,
+                                                            const std::vector<data::CreateBreakpoint>& createBps,
+                                                            std::vector<data::ResolvedBreakpoint>& resolvedBps) = 0;
 };
 
 /// <summary>
 /// Interface that is used to communicate state from the app to the remote debugger.
-/// Implemention is provided by the remote debugger implementation.
+/// Implementation is provided by the remote debugger implementation.
 /// </summary>
 class MessageEventInterface {
  public:
-  virtual void OnStatus(data::Status&& status) = 0;
+  MessageEventInterface() = default;
+  virtual ~MessageEventInterface() = default;
+
+  // Deleted methods
+  MessageEventInterface(const MessageEventInterface& other) = delete;
+  MessageEventInterface(const MessageEventInterface&& other) = delete;
+  MessageEventInterface& operator=(const MessageEventInterface&) = delete;
+  MessageEventInterface& operator=(MessageEventInterface&&) = delete;
+
+  // Interface definition
+  virtual void onStatus(data::Status&& status) = 0;
 };
 }// namespace sdb
 

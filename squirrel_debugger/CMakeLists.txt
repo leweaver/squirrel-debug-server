@@ -10,7 +10,7 @@ set(SDB_DEPENDENCIES_SQUIRREL_FETCHCONTENT FETCHCONTENT)
 add_library(${PROJECT_NAME} STATIC
     "include/sdb/SquirrelDebugger.h" 
     "SquirrelDebugger.cpp"
-)
+ "BreakpointMap.h" "BreakpointMap.cpp" "SquirrelVmHelpers.h" "SquirrelVmHelpers.cpp")
 add_library(sdb::squirrel_debugger ALIAS squirrel_debugger)
 
 target_include_directories(${PROJECT_NAME}

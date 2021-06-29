@@ -3,13 +3,13 @@
 //
 #pragma once
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef FORWARDING_LOGGER_H
+#define FORWARDING_LOGGER_H
 
 #include <oatpp/core/base/Environment.hpp>
 
 namespace sdb {
-class DebugStrLogger : public oatpp::base::Logger {
+class ForwardingLogger : public oatpp::base::Logger {
  public:
   /**
    * Default Logger Config.
@@ -50,7 +50,7 @@ class DebugStrLogger : public oatpp::base::Logger {
    * Constructor.
    * @param config - Logger config.
    */
-  explicit DebugStrLogger(const Config& config = Config(
+  explicit ForwardingLogger(const Config& config = Config(
                                   "%Y-%m-%d %H:%M:%S",
                                   true,
                                   (1 << PRIORITY_V) | (1 << PRIORITY_D) | (1 << PRIORITY_I) | (1 << PRIORITY_W) | (1 << PRIORITY_E)));
@@ -84,4 +84,4 @@ class DebugStrLogger : public oatpp::base::Logger {
 };
 }// namespace sdb
 
-#endif// LOGGER_H
+#endif// FORWARDING_LOGGER_H

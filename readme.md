@@ -1,3 +1,28 @@
+# [S]quirrel Debugger
+
+## Release Notes - v0.1
+First versioned release, 'MVP'
+
+[x] Websocket listener for server state changes
+[x] HTTP Command interface
+[x] Stack-Local variables
+[x] Global Variables
+[ ] Simple Breakpoints
+[ ] Run sample exe with arguments
+[ ] Output redirection & capture
+[ ] Hover-evaluation
+[ ] Coding standards and formatting
+[ ] Copyright headers
+[ ] Better debug logging
+
+## Next release
+[ ] Multiple VM's (threads)
+[ ] Improved output of variables in inspector
+[ ] Conditional breakpoints
+[ ] Modification of variable values (int and string only?)
+[ ] Immediate window for execution?
+[ ] MacOS / Linux support
+
 Setup:
 
 1. download and install any toolchain dependencies (see following toolchains section)
@@ -28,6 +53,7 @@ in an administrative powershell:
 
 NodeJS LTS: `choco install nodejs-lts`
 Yarn: `choco install yarn`
+
 
 
 ## Building

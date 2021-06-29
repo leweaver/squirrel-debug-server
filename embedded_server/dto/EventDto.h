@@ -14,34 +14,41 @@
 namespace sdb::dto {
 // clang-format off
 ENUM(CommandMessageType, v_int32,
-     VALUE(Pause,      0, "pause"),
-     VALUE(Continue,   1, "continue"),
-     VALUE(StepOut,    2, "step_out"),
-     VALUE(StepOver,   3, "step_over"),
-     VALUE(StepIn,     4, "step_in"),
-     VALUE(SendStatus, 5, "send_status"))
+    VALUE(Pause,      0, "pause"),
+    VALUE(Continue,   1, "continue"),
+    VALUE(StepOut,    2, "step_out"),
+    VALUE(StepOver,   3, "step_over"),
+    VALUE(StepIn,     4, "step_in"),
+    VALUE(SendStatus, 5, "send_status"))
 
 ENUM(EventMessageType, v_int32,
-     VALUE(Status,     0, "status"))
+    VALUE(Status,     0, "status"))
 
 ENUM(RunState, v_int32,
-     VALUE(Running,    0, "running"),
-     VALUE(Pausing,    1, "pausing"),
-     VALUE(Paused,     2, "paused"),
-     VALUE(Stepping,   3, "stepping"))
+    VALUE(Running,    0, "running"),
+    VALUE(Pausing,    1, "pausing"),
+    VALUE(Paused,     2, "paused"),
+    VALUE(Stepping,   3, "stepping"))
 
 ENUM(VariableType, v_int32,
-     VALUE(String,     0, "string"),
-     VALUE(Bool,       1, "bool"),
-     VALUE(Integer,    2, "integer"),
-     VALUE(Float,      3, "float"),
-     VALUE(Closure,    4, "closure"),
-     VALUE(Class,      5, "class"),
-     VALUE(Instance,   6, "instance"),
-     VALUE(Array,      7, "array"),
-     VALUE(Table,      8, "table"),
-     VALUE(Other,      9, "other"),
-     VALUE(Null,      10, "null"))
+    VALUE(Null,          0, "null"),
+    VALUE(Integer,       1, "integer"),
+    VALUE(Float,         2, "float"),
+    VALUE(Bool,          3, "bool"),
+    VALUE(String,        4, "string"),
+    VALUE(Table,         5, "table"),
+    VALUE(Array,         6, "array"),
+    VALUE(UserData,      7, "userdata"),
+    VALUE(Closure,       8, "closure"),
+    VALUE(NativeClosure, 9, "nativeclosure"),
+    VALUE(Generator,    10, "generator"),
+    VALUE(UserPointer,  11, "userpointer"),
+    VALUE(Thread,       12, "thread"),
+    VALUE(FuncProto,    13, "funcproto"),
+    VALUE(Class,        14, "class"),
+    VALUE(Instance,     15, "instance"),
+    VALUE(WeakRef,      16, "weakref"),
+    VALUE(Outer,        17, "outer"))
 // clang-format on
 
 template<typename TMessageBody>
@@ -78,8 +85,8 @@ class Variable : public oatpp::DTO {
   DTO_FIELD(String, instanceClassName);
 };
 
-class VariableList : public oatpp::DTO {
-  DTO_INIT(VariableList, DTO)
+class VariableList : public CommandMessageResponse {
+  DTO_INIT(VariableList, CommandMessageResponse)
 
   DTO_FIELD(List<Object<Variable>>, variables);
 };
@@ -98,6 +105,28 @@ class Status : public oatpp::DTO {
 
   DTO_FIELD(Enum<RunState>, runstate);
   DTO_FIELD(List<Object<StackEntry>>, stack);
+};
+
+class CreateBreakpoint : public oatpp::DTO
+{
+  DTO_INIT(CreateBreakpoint, DTO)
+
+  DTO_FIELD(UInt64, id);
+  DTO_FIELD(UInt32, line);
+};
+
+class ResolvedBreakpoint : public oatpp::DTO {
+  DTO_INIT(ResolvedBreakpoint, DTO)
+
+  DTO_FIELD(Int64, id);
+  DTO_FIELD(Int32, line);
+  DTO_FIELD(Boolean, resolved);
+};
+
+class ResolvedBreakpointListResponse : public CommandMessageResponse {
+  DTO_INIT(ResolvedBreakpointListResponse, CommandMessageResponse)
+
+  DTO_FIELD(List<Object<ResolvedBreakpoint>>, breakpoints);
 };
 }// namespace sdb::dto
 

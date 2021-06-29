@@ -242,6 +242,11 @@ export class SquidRuntime extends EventEmitter {
         this._breakPoints.delete(path);
     }
 
+    public async setFileBreakpoints(path: string, lines: number[]): Promise<ISquidBreakpoint[]> {
+        //const setBpResponse = sendCommand('FileBreakpoints');
+        return Promise.reject();
+    }
+
     // private methods
 
     private async connectDebugger(hostnamePort: string): Promise<void> {
@@ -297,11 +302,12 @@ export class SquidRuntime extends EventEmitter {
         return Promise.resolve();
     }
 
-    private async sendCommand(commandName: string) {
+    private async sendCommand(commandName: string, data: any = undefined) {
         let uri = `http://${this._debuggerHostnamePort}/DebugCommand/${commandName}`;
         logger.log(uri);
         const {body} = await got.put(uri, {
-            json: true
+            json: true,
+            body: data
         });
         return body.data;
     }

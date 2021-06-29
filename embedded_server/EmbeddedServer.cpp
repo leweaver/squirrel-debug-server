@@ -2,7 +2,7 @@
 // Created by Lewis weaver on 5/30/2021.
 //
 
-#include "Logger.h"
+#include "ForwardingLogger.h"
 #include "include/sdb/EmbeddedServer.h"
 #include "dto/EventDto.h"
 
@@ -35,9 +35,9 @@ class OatMessageEventInterface : public MessageEventInterface {
   explicit OatMessageEventInterface(std::shared_ptr<WSInstanceListener> webSocketInstanceListener)
       : webSocketInstanceListener_(webSocketInstanceListener) {}
 
-  void OnStatus(data::Status&& status) override {
+  void onStatus(data::Status&& status) override {
     const auto statusDto = dto::Status::createShared();
-    statusDto->runstate = static_cast<sdb::dto::RunState>(status.runstate);
+    statusDto->runstate = static_cast<sdb::dto::RunState>(status.runState);
     statusDto->stack = oatpp::List<oatpp::Object<dto::StackEntry>>::createShared();
     for (const auto& stackEntry : status.stack) {
       const auto stackEntryDto = dto::StackEntry::createShared();
@@ -142,7 +142,7 @@ EmbeddedServer* EmbeddedServer::Create() {
 void EmbeddedServer::InitEnvironment() {
   std::cout << OATPP_SWAGGER_RES_PATH << std::endl;
   oatpp::base::Environment::init();
-  oatpp::base::Environment::setLogger(std::make_shared<DebugStrLogger>());
+  oatpp::base::Environment::setLogger(std::make_shared<ForwardingLogger>());
 }
 
 void EmbeddedServer::ShutdownEnvironment() {
