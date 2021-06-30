@@ -124,12 +124,20 @@ void Run(std::shared_ptr<SquirrelDebugger> debugger)
   // Enable debugging hooks
   if (debugger) {
     debugger->AddVm(v);
-    const std::vector<sdb::data::CreateBreakpoint> bps{{0U, 43U}};
+#if 0
+    const std::vector < sdb::data::CreateBreakpoint> bps{{ 0U, 43U } };
     std::vector<sdb::data::ResolvedBreakpoint> resolvedBps;
     const auto rc = debugger->SetFileBreakpoints(fileName, bps, resolvedBps);
     if (rc != ReturnCode::Success) {
       cerr << "Failed to set BP on startup";
     }
+#endif
+#if 1
+    const auto rc = debugger->PauseExecution();
+    if (rc != ReturnCode::Success) {
+      cerr << "Failed to pause on startup";
+    }
+#endif
     sq_enabledebuginfo(v, SQTrue);
     sq_setnativedebughook(v, &SquirrelNativeDebugHook);
   }

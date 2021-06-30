@@ -15,6 +15,8 @@ void LogString(const char* tag, size_t line, Level level, const char* str);
 
 #define SDB_LOGD(tag, ...) sdb::log::LogFormatted(tag, __LINE__, sdb::log::Level::Debug, __VA_ARGS__)
 #define SDB_LOGI(tag, ...) sdb::log::LogFormatted(tag, __LINE__, sdb::log::Level::Info, __VA_ARGS__)
+#define SDB_LOGW(tag, ...) sdb::log::LogFormatted(tag, __LINE__, sdb::log::Level::Warning, __VA_ARGS__)
+#define SDB_LOGE(tag, ...) sdb::log::LogFormatted(tag, __LINE__, sdb::log::Level::Error, __VA_ARGS__)
 
 }// namespace sdb::log
 

@@ -77,7 +77,7 @@ struct CreateBreakpoint {
 struct ResolvedBreakpoint {
   uint64_t id;
   uint32_t line;
-  bool resolved;
+  bool verified;
 };
 }// namespace data
 

@@ -148,15 +148,12 @@ struct SquirrelVmDataImpl {
   HSQUIRRELVM vm = nullptr;
 };
 
-}// namespace sdb
+}// namespace sdb::internal
 
 SquirrelDebugger::SquirrelDebugger()
     : pauseMutexData_(new internal::PauseMutexDataImpl())
     , vmData_(new internal::SquirrelVmDataImpl())
-{
-  SDB_LOGD(kLogTag, "Initialized");
-  SDB_LOGD(kLogTag, "Initialized %s", "a thing");
-}
+{}
 
 SquirrelDebugger::~SquirrelDebugger()
 {
@@ -177,6 +174,7 @@ void SquirrelDebugger::AddVm(SQVM* const vm)
 
 ReturnCode SquirrelDebugger::PauseExecution()
 {
+  SDB_LOGD(kLogTag, "PauseExecution");
   if (pauseRequested_ == PauseType::None) {
     std::lock_guard lock(pauseMutex_);
     if (pauseRequested_ == PauseType::None) {
@@ -189,6 +187,7 @@ ReturnCode SquirrelDebugger::PauseExecution()
 
 ReturnCode SquirrelDebugger::ContinueExecution()
 {
+  SDB_LOGD(kLogTag, "ContinueExecution");
   if (pauseRequested_ != PauseType::None) {
     std::lock_guard lock(pauseMutex_);
     if (pauseRequested_ != PauseType::None) {
@@ -203,16 +202,19 @@ ReturnCode SquirrelDebugger::ContinueExecution()
 
 ReturnCode SquirrelDebugger::StepOut()
 {
+  SDB_LOGD(kLogTag, "StepOut");
   return Step(PauseType::StepOut, 1);
 }
 
 ReturnCode SquirrelDebugger::StepOver()
 {
+  SDB_LOGD(kLogTag, "StepOver");
   return Step(PauseType::StepOver, 0);
 }
 
 ReturnCode SquirrelDebugger::StepIn()
 {
+  SDB_LOGD(kLogTag, "StepIn");
   return Step(PauseType::StepIn, -1);
 }
 
@@ -220,6 +222,7 @@ ReturnCode SquirrelDebugger::GetStackVariables(
         int32_t stackFrame, const std::string& path, const data::PaginationInfo& pagination,
         std::vector<Variable>& variables)
 {
+  SDB_LOGD(kLogTag, "GetStackVariables");
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
     SDB_LOGD(__FILE__, "cannot retrieve stack variables, not paused.");
@@ -236,6 +239,7 @@ ReturnCode SquirrelDebugger::GetStackVariables(
 ReturnCode SquirrelDebugger::GetGlobalVariables(
         const std::string& path, const PaginationInfo& pagination, std::vector<Variable>& variables)
 {
+  SDB_LOGD(kLogTag, "GetGlobalVariables");
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
     SDB_LOGD(__FILE__, "cannot retrieve global variables, not paused.");
@@ -249,26 +253,30 @@ ReturnCode SquirrelDebugger::SetFileBreakpoints(
         const std::string& file, const std::vector<data::CreateBreakpoint>& createBps,
         std::vector<data::ResolvedBreakpoint>& resolvedBps)
 {
+  SDB_LOGD(
+          kLogTag, "SetFileBreakpoints file=%s createBps.size()=%" PRIu64, file.c_str(),
+          static_cast<uint64_t>(createBps.size()));
   // First resolve the breakpoints against the script file.
   std::vector<Breakpoint> bps;
-  for (const auto& createBp : createBps) {
-    bps.emplace_back(Breakpoint{createBp.line});
+  for (const auto& [id, line] : createBps) {
+    bps.emplace_back(Breakpoint{line});
 
     // todo: load file from disk, make sure line isn't empty.
-    resolvedBps.emplace_back(data::ResolvedBreakpoint{createBp.id, createBp.line, true});
+    resolvedBps.emplace_back(data::ResolvedBreakpoint{id, line, true});
   }
 
   {
     std::lock_guard lock(pauseMutex_);
 
-    pauseMutexData_->breakpoints.Clear(file);
-    pauseMutexData_->breakpoints.AddAll(file, bps);
+    const auto handle = pauseMutexData_->breakpoints.EnsureFileNameHandle(file);
+    pauseMutexData_->breakpoints.Clear(handle);
+    pauseMutexData_->breakpoints.AddAll(handle, bps);
   }
 
   return ReturnCode::Success;
 }
 
-ReturnCode SquirrelDebugger::Step(PauseType pauseType, int returnsRequired)
+ReturnCode SquirrelDebugger::Step(const PauseType pauseType, const int returnsRequired)
 {
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
@@ -346,8 +354,11 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
       // Check for breakpoints
       Breakpoint bp;
       const std::string fileName{sourceName};
-      if (line >= 0 && line < INT32_MAX &&
-          pauseMutexData_->breakpoints.ReadBreakpoint(fileName, static_cast<uint32_t>(line), bp))
+
+      // TODO: store a map of const char* to FileNameHandle. (after verifying that the const char* addresses don't constantly change...)
+      const auto handle = pauseMutexData_->breakpoints.FindFileNameHandle(fileName);
+      if (line >= 0 && line < INT32_MAX && handle != nullptr &&
+          pauseMutexData_->breakpoints.ReadBreakpoint(handle, static_cast<uint32_t>(line), bp))
       {
         // right now, only support basic breakpoints so no further interrogation is needed.
         pauseRequested_ = PauseType::Pause;

@@ -68,22 +68,26 @@ class EndpointImpl : public EmbeddedServer {
     appComponents_ = std::make_shared<AppComponents>();
 
     OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, router);
+    OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::handler::ErrorHandler>, errorHandler);
 
     // Controllers
     std::shared_ptr<oatpp::web::server::api::ApiController::Endpoints> docEndpoints = oatpp::swagger::Controller::Endpoints::createShared();
 
     auto debugCommandController = DebugCommandController::CreateShared(messageCommandInterface);
     debugCommandController->addEndpointsToRouter(router);
+    debugCommandController->setErrorHandler(errorHandler);
     docEndpoints->pushBackAll(debugCommandController->getEndpoints());
     controllers_.push_back(debugCommandController);
 
     auto staticController = StaticController::CreateShared();
     staticController->addEndpointsToRouter(router);
+    staticController->setErrorHandler(errorHandler);
     docEndpoints->pushBackAll(staticController->getEndpoints());
     controllers_.push_back(staticController);
 
     auto websocketController = WebsocketController::CreateShared();
     websocketController->addEndpointsToRouter(router);
+    websocketController->setErrorHandler(errorHandler);
     docEndpoints->pushBackAll(websocketController->getEndpoints());
     controllers_.push_back(websocketController);
 
@@ -99,7 +103,7 @@ class EndpointImpl : public EmbeddedServer {
 
   void Start() override {
     /* create server */
-    worker_ = std::thread([components = this->appComponents_, stopping = this->stopping_]() {
+    worker_ = std::thread([stopping = this->stopping_]() {
       /* Get connection handler component */
       OATPP_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, connectionHandler, "http");
 

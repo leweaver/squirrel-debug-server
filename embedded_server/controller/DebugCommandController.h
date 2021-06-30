@@ -42,6 +42,8 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     return std::make_shared<DebugCommandController>(std::move(messageCommandInterface), objectMapper);
   }
 
+  
+
   ENDPOINT("PUT", "SendStatus", SendStatus)
   {
     return CreateReturnCodeResponse(messageCommandInterface_->SendStatus());
@@ -130,17 +132,17 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
 
   ENDPOINT(
-          "PUT", "FileBreakpoints/{file}", FileBreakpoints, PATH(String, file),
-          BODY_DTO(List<Object<dto::CreateBreakpoint>>, createBpList))
+          "PUT", "FileBreakpoints", FileBreakpoints,
+          BODY_DTO(Object<dto::SetFileBreakpointsRequest>, createBpRequest))
   {
     std::vector<data::CreateBreakpoint> bpList;
-    for (const auto& bpDto : *createBpList) {
+    for (const auto& bpDto : *createBpRequest->breakpoints) {
       bpList.emplace_back(data::CreateBreakpoint{bpDto->id, bpDto->line});
     }
 
     std::vector<data::ResolvedBreakpoint> resolvedBpList;
-    const data::ReturnCode rc =
-            messageCommandInterface_->SetFileBreakpoints(std::string(file->c_str()), bpList, resolvedBpList);
+    const data::ReturnCode rc = messageCommandInterface_->SetFileBreakpoints(
+            std::string(createBpRequest->file->c_str()), bpList, resolvedBpList);
     if (rc != data::ReturnCode::Success) {
       return CreateReturnCodeResponse(rc);
     }
@@ -148,11 +150,11 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     const auto resolvedBpListDto = dto::ResolvedBreakpointListResponse::createShared();
     resolvedBpListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
     resolvedBpListDto->breakpoints = List<Object<dto::ResolvedBreakpoint>>::createShared();
-    for (const auto [id, line, resolved] : resolvedBpList) {
+    for (const auto [id, line, verified] : resolvedBpList) {
       auto resolvedBpDto = Object<dto::ResolvedBreakpoint>::createShared();
       resolvedBpDto->id = id;
       resolvedBpDto->line = line;
-      resolvedBpDto->resolved = resolved;
+      resolvedBpDto->verified = verified;
       resolvedBpListDto->breakpoints->emplace_back(std::move(resolvedBpDto));
     }
 
@@ -160,6 +162,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
   ENDPOINT_INFO(FileBreakpoints)
   {
+    info->addConsumes<Object<dto::SetFileBreakpointsRequest>>("application/json");
     info->addResponse<Object<dto::ResolvedBreakpointListResponse>>(Status::CODE_200, "application/json");
     AddCommandMessageErrorResponses(info);
   }

@@ -15,8 +15,9 @@
 
 #include <oatpp/core/macro/component.hpp>
 
-#include "websocket/WSListener.h"
+#include "RequestErrorHandler.h"
 #include "SwaggerComponent.h"
+#include "websocket/WSListener.h"
 
 namespace sdb {
 
@@ -29,18 +30,21 @@ const uint32_t kDefaultPort = 8000U;
  */
 struct AppComponents {
   explicit AppComponents()
-      : webSocketInstanceListener(CreateWebSocketInstanceListener()), webSocketConnectionHandler(CreateWebSocketConnectionHandler(webSocketInstanceListener)) {
-  }
+      : webSocketInstanceListener(CreateWebSocketInstanceListener())
+      , webSocketConnectionHandler(CreateWebSocketConnectionHandler(webSocketInstanceListener))
+  {}
 
   static oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>
-  CreateWebSocketConnectionHandler(const std::shared_ptr<WSInstanceListener>& instanceListener) {
+  CreateWebSocketConnectionHandler(const std::shared_ptr<WSInstanceListener>& instanceListener)
+  {
     auto connectionHandler = oatpp::websocket::ConnectionHandler::createShared();
     connectionHandler->setSocketInstanceListener(instanceListener);
     return oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>(
             "websocket" /* qualifier */, connectionHandler);
   }
 
-  static std::shared_ptr<WSInstanceListener> CreateWebSocketInstanceListener() {
+  static std::shared_ptr<WSInstanceListener> CreateWebSocketInstanceListener()
+  {
     return std::make_shared<WSInstanceListener>();
   }
 
@@ -54,16 +58,23 @@ struct AppComponents {
    */
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, serverConnectionProvider)
   ([] {
-    return oatpp::network::tcp::server::ConnectionProvider::createShared({kDefaultHostname, kDefaultPort, oatpp::network::Address::IP_4});
+    return oatpp::network::tcp::server::ConnectionProvider::createShared(
+            {kDefaultHostname, kDefaultPort, oatpp::network::Address::IP_4});
+  }());
+
+  /*
+   *  Create ErrorHandler
+   */
+  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::web::server::handler::ErrorHandler>, errorHandler)
+  ([] {
+    return std::static_pointer_cast<oatpp::web::server::handler::ErrorHandler>(RequestErrorHandler::CreateShared());
   }());
 
   /*
    *  Create Router component
    */
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, httpRouter)
-  ([] {
-    return oatpp::web::server::HttpRouter::createShared();
-  }());
+  ([] { return oatpp::web::server::HttpRouter::createShared(); }());
 
   /*
    *  Create http ConnectionHandler
@@ -83,7 +94,7 @@ struct AppComponents {
     objectMapper->getDeserializer()->getConfig()->allowUnknownFields = false;
     return objectMapper;
   }());
-  
+
   std::shared_ptr<WSInstanceListener> webSocketInstanceListener;
   oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler;
 };

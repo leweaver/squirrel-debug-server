@@ -22,6 +22,7 @@ First versioned release, 'MVP'
 [ ] Modification of variable values (int and string only?)
 [ ] Immediate window for execution?
 [ ] MacOS / Linux support
+[ ] Full squirrel unicode support
 
 Setup:
 

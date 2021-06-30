@@ -115,12 +115,19 @@ class CreateBreakpoint : public oatpp::DTO
   DTO_FIELD(UInt32, line);
 };
 
+class SetFileBreakpointsRequest : public oatpp::DTO {
+  DTO_INIT(SetFileBreakpointsRequest, DTO)
+
+  DTO_FIELD(String, file);
+  DTO_FIELD(List<Object<dto::CreateBreakpoint>>, breakpoints);
+};
+
 class ResolvedBreakpoint : public oatpp::DTO {
   DTO_INIT(ResolvedBreakpoint, DTO)
 
   DTO_FIELD(Int64, id);
   DTO_FIELD(Int32, line);
-  DTO_FIELD(Boolean, resolved);
+  DTO_FIELD(Boolean, verified);
 };
 
 class ResolvedBreakpointListResponse : public CommandMessageResponse {

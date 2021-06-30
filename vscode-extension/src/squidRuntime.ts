@@ -4,7 +4,7 @@
 
 import { logger} from 'vscode-debugadapter';
 import { EventEmitter } from 'events';
-import { EventMessage, EventMessageType, Status, Runstate, Variable } from './squidDto';
+import { EventMessage, EventMessageType, Status, Runstate, Variable, ResolvedBreakpoint } from './squidDto';
 
 import encodeUrl = require('encodeurl');
 import got = require('got');
@@ -60,7 +60,7 @@ export class SquidRuntime extends EventEmitter {
 
     //private _breakAddresses = new Set<string>();
 
-    private _noDebug = false;
+    private _connected = false;
 
     //private _namedException: string | undefined;
     //private _otherExceptions = false;
@@ -72,6 +72,7 @@ export class SquidRuntime extends EventEmitter {
 
     constructor(private _fileAccessor: FileAccessor) {
         super();
+        logger.log("Creating new squidRuntime");
     }
 
     /**
@@ -79,29 +80,25 @@ export class SquidRuntime extends EventEmitter {
      */
     public async start(hostnamePort: string, stopOnEntry: boolean, noDebug: boolean): Promise<void> {
 
-        this._noDebug = noDebug;
-
         this._debuggerHostnamePort = hostnamePort;
+        const self = this;
         await this.connectDebugger(this._debuggerHostnamePort)
-            .then(() => {
-                logger.log('connected');
+            .then(async () => {
+                logger.log('in start callback: connected=' + self._connected + " _breakPoints.length=" + (self._breakPoints?.size ?? "null"));
+                for (const file of self._breakPoints.keys()) {
+                    logger.log('async connected: ' + self._connected);
+                    await self.verifyBreakpoints(file);
+                };
+                logger.log('sending SendStatus command');
                 this.sendCommand('SendStatus');
             })
-            .catch(_ => this.emit('end'));
-
-        //await this.loadSource(program);
-        //this._currentLine = -1;
-
-        //await this.verifyBreakpoints(this._sourceFile);
-/*
-        if (stopOnEntry) {
-            // we step once
-            this.step();
-        } else {
-            // we just start to run until we hit a breakpoint or an exception
-            this.continue();
-        }
-        */
+            .catch(e => {
+                if (e instanceof Error) {
+                    e = e.message;
+                }
+                logger.error(e);
+                this.emit('end');
+            });
     }
 
     /**
@@ -160,26 +157,6 @@ export class SquidRuntime extends EventEmitter {
         return dto.variables.map((instanceData: any) => new Variable(instanceData));
     }
 
-    public getBreakpoints(path: string, line: number): number[] {
-
-        const l = this._sourceLines[line];
-
-        let sawSpace = true;
-        const bps: number[] = [];
-        for (let i = 0; i < l.length; i++) {
-            if (l[i] !== ' ') {
-                if (sawSpace) {
-                    bps.push(i);
-                    sawSpace = false;
-                }
-            } else {
-                sawSpace = true;
-            }
-        }
-
-        return bps;
-    }
-
     /*
      * Set breakpoint in file with given line.
      */
@@ -215,47 +192,88 @@ export class SquidRuntime extends EventEmitter {
     }
 
     private async verifyBreakpoints(path: string): Promise<void> {
-        if (this._noDebug) {
-            return;
-        }
-
         const bps = this._breakPoints.get(path);
+        logger.log("in verifyBreakpoints bps.length=" + (bps?.length ?? "null") + " _connected=" + this._connected);
         if (bps) {
-            let sourceLines = await this.loadSource(path);
-            bps.forEach(bp => {
-                if (bp.line >= sourceLines.length) {
-                    return;
-                }
+            if (this._connected) {
+                const breakpoints = bps.map((bp: ISquidBreakpoint) => {
+                    return {
+                        "id": bp.id,
+                        "line": bp.line
+                    };
+                });
 
-                if (!bp.verified) {
-                    bp.verified = true;
+                logger.log("Sending resolve BP request");
+                const remoteBps = await this.sendCommand('FileBreakpoints', {
+                    file: path, 
+                    breakpoints: breakpoints,
+                });
+                
+                // Replace the existing BP records with the resovled ones.
+                
+                logger.log("Got em: " + JSON.stringify(remoteBps));
+                const resolvedBpDtos = remoteBps.breakpoints.map((instanceData: any) => new ResolvedBreakpoint(instanceData));
+
+                logger.log("Got em mapped");
+                this._breakPoints.set(path, resolvedBpDtos);
+                logger.log("Set em mapped");
+                
+                logger.log("Got resolved BPS: " + JSON.stringify(resolvedBpDtos));
+                resolvedBpDtos.forEach((bp: ResolvedBreakpoint) => {
+                    logger.log("Resolving BP");
                     this.sendEvent('breakpointValidated', bp);
-                }
-            });
+                });
+                // let sourceLines = await this.loadSource(path);
+                // bps.forEach(bp => {
+                //     if (bp.line >= sourceLines.length) {
+                //         return;
+                //     }
+
+                //     if (!bp.verified) {
+                //         bp.verified = true;
+                //         this.sendEvent('breakpointValidated', bp);
+                //     }
+                // });
+            } else {
+                bps.forEach(bp => {
+                    if (bp.verified = false) {
+                        this.sendEvent('breakpointValidated', bp);
+                    }
+                });
+            }
+        } else {
+            logger.log('no bps for path: ' + path);
         }
     }
 
-    /*
-     * Clear all breakpoints for file.
+    /**
+     * Clears, then recreates all breakpoints for the given file. Will validate all breakpoints.
      */
-    public clearBreakpoints(path: string): void {
-        this._breakPoints.delete(path);
-    }
-
     public async setFileBreakpoints(path: string, lines: number[]): Promise<ISquidBreakpoint[]> {
-        //const setBpResponse = sendCommand('FileBreakpoints');
-        return Promise.reject();
+        logger.log("in setFileBreakpoints");
+        this._breakPoints.delete(path);
+        let bps = new Array<ISquidBreakpoint>();
+        this._breakPoints.set(path, bps);
+        
+        for (const line of lines) {
+            const bp: ISquidBreakpoint = { verified: false, line, id: this._breakpointId++ };
+            bps.push(bp);
+        }
+        
+        await this.verifyBreakpoints(path);
+        return bps;
     }
 
     // private methods
 
-    private async connectDebugger(hostnamePort: string): Promise<void> {
-        
-        logger.log('connectDebugger');
+    private async connectDebugger(hostnamePort: string): Promise<void> {        
+        logger.log('in connectDebugger');
         let self = this;
         return new Promise<void>((resolve, reject) => {
             let ws = new WebSocket(`ws://${hostnamePort}/ws`);
             ws.on('open', function open() {
+                logger.log('open');
+                self._connected = true;
                 resolve();
             });
             ws.on('message', (msgStr: string) => self.handleWebsocketMessage(msgStr));
@@ -265,6 +283,7 @@ export class SquidRuntime extends EventEmitter {
             });
             ws.on('close', (code: number, reason: string) => {
                 logger.log(`Websocket connection closed (${code}: ${reason}`);
+                self._connected = false;
                 this.emit('end');
             });
         });
@@ -309,7 +328,7 @@ export class SquidRuntime extends EventEmitter {
             json: true,
             body: data
         });
-        return body.data;
+        return body;
     }
     private async sendQuery(commandName: string) {
         let uri = `http://${this._debuggerHostnamePort}/DebugCommand/${commandName}`;
@@ -332,7 +351,7 @@ export class SquidRuntime extends EventEmitter {
         }
     }
 
-    private async loadSource(file: string): Promise<string[]> {
+    public async loadSource(file: string): Promise<string[]> {
         let sourceLines = this._sourceLines[file];
 
         if (typeof(sourceLines) === "undefined") {

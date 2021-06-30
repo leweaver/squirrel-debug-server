@@ -36,6 +36,14 @@ interface ILaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     noDebug?: boolean;
 }
 
+class DeferredBreakpoint extends Breakpoint {
+    public id: number;
+    constructor(id: number, line: number, verified: boolean) {
+        super(verified, line);
+        this.id = id;
+    }
+}
+
 export class SquidDebugSession extends DebugSession {
 
     // we don't support multiple threads, so we can use a hardcoded ID for the default thread
@@ -96,6 +104,7 @@ export class SquidDebugSession extends DebugSession {
             this.sendEvent(new ContinuedEvent(SquidDebugSession.threadID));
         });
         this._runtime.on('breakpointValidated', (bp: ISquidBreakpoint) => {
+            logger.log("BP Changed: " + bp.id + " -> " + bp.verified);
             this.sendEvent(new BreakpointEvent('changed', { verified: bp.verified, id: bp.id } as DebugProtocol.Breakpoint));
         });
         this._runtime.on('output', (text, filePath, line, column) => {
@@ -149,7 +158,7 @@ export class SquidDebugSession extends DebugSession {
         response.body.supportsCancelRequest = true;
 
         // make VS Code send the breakpointLocations request
-        response.body.supportsBreakpointLocationsRequest = true;
+        response.body.supportsBreakpointLocationsRequest = false;
 
         // make VS Code provide "Step in Target" functionality
         response.body.supportsStepInTargetsRequest = true;
@@ -202,7 +211,6 @@ export class SquidDebugSession extends DebugSession {
         // make sure to 'Stop' the buffered logging if 'trace' is not set
         //logger.setup(args.trace === false ? Logger.LogLevel.Stop : Logger.LogLevel.Verbose, false);
         logger.setup(Logger.LogLevel.Verbose, undefined/*'c:\\Squid.txt'*/);
-        logger.log('hello world');
 
         // wait until configuration has finished (and configurationDoneRequest has been called)
         await this._configurationDone.wait(1000);
@@ -218,42 +226,17 @@ export class SquidDebugSession extends DebugSession {
         const path = args.source.path as string;
         const clientLines = args.lines || [];
 
-        // clear all breakpoints for this file
-        this._runtime.clearBreakpoints(path);
+        
+        logger.verbose('setBreakPointsRequest: ' + path);
 
         // set and verify breakpoint locations
-        const actualBreakpoints0 = clientLines.map(async l => {
-            const { verified, line, id } = await this._runtime.setBreakPoint(path, this.convertClientLineToDebugger(l));
-            const bp = new Breakpoint(verified, this.convertDebuggerLineToClient(line)) as DebugProtocol.Breakpoint;
-            bp.id= id;
-            return bp;
-        });
-        const actualBreakpoints = await Promise.all<DebugProtocol.Breakpoint>(actualBreakpoints0);
+        const debuggerLines = clientLines.map(l => this.convertClientLineToDebugger(l));
+        const actualBreakpoints =  (await this._runtime.setFileBreakpoints(path, debuggerLines)).map(bp => new DeferredBreakpoint(bp.id, this.convertDebuggerLineToClient(bp.line), bp.verified));
 
         // send back the actual breakpoint positions
         response.body = {
             breakpoints: actualBreakpoints
         };
-        this.sendResponse(response);
-    }
-
-    protected breakpointLocationsRequest(response: DebugProtocol.BreakpointLocationsResponse, args: DebugProtocol.BreakpointLocationsArguments, request?: DebugProtocol.Request): void {
-
-        if (args.source.path) {
-            const bps = this._runtime.getBreakpoints(args.source.path, this.convertClientLineToDebugger(args.line));
-            response.body = {
-                breakpoints: bps.map(col => {
-                    return {
-                        line: args.line,
-                        column: this.convertDebuggerColumnToClient(col)
-                    };
-                })
-            };
-        } else {
-            response.body = {
-                breakpoints: []
-            };
-        }
         this.sendResponse(response);
     }
 
@@ -470,6 +453,11 @@ export class SquidDebugSession extends DebugSession {
         let reply: string | undefined = undefined;
 
         if (args.context === 'repl') {
+
+            if (1 === 1) {
+                throw new Error("Not sure what all this mumbo jumbo is, and it certainly won't work with the remote debugger.");
+            }
+
             // 'evaluate' supports to create and delete breakpoints from the 'repl':
             const matches = /new +([0-9]+)/.exec(args.expression);
             
@@ -542,7 +530,6 @@ export class SquidDebugSession extends DebugSession {
 
         this._cancelledProgressId = undefined;
     }
-
 
     protected completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments): void {
 

@@ -82,3 +82,21 @@ export class Variable {
         }
     }
 }
+
+export class ResolvedBreakpoint {
+    public id: number;
+    public line: number;
+    public verified: boolean;
+
+    constructor(instanceData?: any) {
+        if (instanceData) {
+            this.id = instanceData.id;
+            this.line = instanceData.line;
+            this.verified = instanceData.verified;
+        } else {
+            this.id = 0;
+            this.line = 0;
+            this.verified = false;
+        }
+    }
+}
