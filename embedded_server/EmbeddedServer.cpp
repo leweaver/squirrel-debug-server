@@ -46,6 +46,7 @@ class OatMessageEventInterface : public MessageEventInterface {
       stackEntryDto->function = stackEntry.function.c_str();
       statusDto->stack->push_back(stackEntryDto);
     }
+    statusDto->pausedAtBreakpointId = status.pausedAtBreakpointId;
 
     const auto wrapper = dto::EventMessageWrapper<dto::Status>::createShared();
     wrapper->type = dto::EventMessageType::Status;

@@ -38,7 +38,7 @@ class SquirrelDebugger final : public MessageCommandInterface {
   [[nodiscard]] data::ReturnCode StepOver() override;
   [[nodiscard]] data::ReturnCode StepIn() override;
   [[nodiscard]] data::ReturnCode SendStatus() override;
-  [[nodiscard]] data::ReturnCode GetStackVariables(int32_t stackFrame, const std::string& path,
+  [[nodiscard]] data::ReturnCode GetStackVariables(uint32_t stackFrame, const std::string& path,
                                                    const data::PaginationInfo& pagination,
                                                    std::vector<data::Variable>& variables) override;
 

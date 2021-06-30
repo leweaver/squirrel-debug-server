@@ -125,7 +125,7 @@ void Run(std::shared_ptr<SquirrelDebugger> debugger)
   if (debugger) {
     debugger->AddVm(v);
 #if 0
-    const std::vector < sdb::data::CreateBreakpoint> bps{{ 0U, 43U } };
+    const std::vector < sdb::data::CreateBreakpoint> bps{{ 0ULL, 43U } };
     std::vector<sdb::data::ResolvedBreakpoint> resolvedBps;
     const auto rc = debugger->SetFileBreakpoints(fileName, bps, resolvedBps);
     if (rc != ReturnCode::Success) {

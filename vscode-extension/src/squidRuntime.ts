@@ -135,7 +135,7 @@ export class SquidRuntime extends EventEmitter {
                     index: i,
                     name: statusStackEntry.function,
                     file: statusStackEntry.file,
-                    line: statusStackEntry.line - 1
+                    line: statusStackEntry.line
                 });
             }
         } else {
@@ -203,24 +203,16 @@ export class SquidRuntime extends EventEmitter {
                     };
                 });
 
-                logger.log("Sending resolve BP request");
                 const remoteBps = await this.sendCommand('FileBreakpoints', {
                     file: path, 
                     breakpoints: breakpoints,
                 });
                 
                 // Replace the existing BP records with the resovled ones.
-                
-                logger.log("Got em: " + JSON.stringify(remoteBps));
                 const resolvedBpDtos = remoteBps.breakpoints.map((instanceData: any) => new ResolvedBreakpoint(instanceData));
-
-                logger.log("Got em mapped");
                 this._breakPoints.set(path, resolvedBpDtos);
-                logger.log("Set em mapped");
                 
-                logger.log("Got resolved BPS: " + JSON.stringify(resolvedBpDtos));
                 resolvedBpDtos.forEach((bp: ResolvedBreakpoint) => {
-                    logger.log("Resolving BP");
                     this.sendEvent('breakpointValidated', bp);
                 });
                 // let sourceLines = await this.loadSource(path);
@@ -343,8 +335,13 @@ export class SquidRuntime extends EventEmitter {
         this._status = status;
         
         if (status.runstate === Runstate.paused) {
-            logger.log('Stopping');
-            this.sendEvent('stopOnStep');
+            if (status.pausedAtBreakpointId > 0) {
+                logger.log('Hit breakpoint ' + status.pausedAtBreakpointId);
+                this.sendEvent('stopOnBreakpoint');
+            } else {
+                logger.log('Paused');
+                this.sendEvent('stopOnStep');
+            }
         } else {
             logger.log('Playing');
             this.sendEvent('continued');

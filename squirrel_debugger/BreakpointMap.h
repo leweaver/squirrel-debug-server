@@ -12,6 +12,7 @@
 
 namespace sdb {
 struct Breakpoint {
+  uint64_t id = 0;
   uint32_t line = 0;
 };
 

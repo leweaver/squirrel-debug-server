@@ -144,8 +144,13 @@ struct SquirrelVmDataImpl {
     return rc;
   }
 
-  int currentStackDepth = 0;
   HSQUIRRELVM vm = nullptr;
+
+  struct StackInfo {
+    BreakpointMap::FileNameHandle fileNameHandle;
+  };
+  std::vector<StackInfo> currentStack;
+  std::unordered_map<const SQChar*, BreakpointMap::FileNameHandle> fileNameHandles;
 };
 
 }// namespace sdb::internal
@@ -219,7 +224,7 @@ ReturnCode SquirrelDebugger::StepIn()
 }
 
 ReturnCode SquirrelDebugger::GetStackVariables(
-        int32_t stackFrame, const std::string& path, const data::PaginationInfo& pagination,
+        const uint32_t stackFrame, const std::string& path, const PaginationInfo& pagination,
         std::vector<Variable>& variables)
 {
   SDB_LOGD(kLogTag, "GetStackVariables");
@@ -229,7 +234,7 @@ ReturnCode SquirrelDebugger::GetStackVariables(
     return ReturnCode::InvalidNotPaused;
   }
 
-  if (stackFrame > vmData_->currentStackDepth) {
+  if (stackFrame > vmData_->currentStack.size()) {
     SDB_LOGD(__FILE__, "cannot retrieve stack variables, requested stack frame exceeds current stack depth");
     return ReturnCode::InvalidParameter;
   }
@@ -256,13 +261,28 @@ ReturnCode SquirrelDebugger::SetFileBreakpoints(
   SDB_LOGD(
           kLogTag, "SetFileBreakpoints file=%s createBps.size()=%" PRIu64, file.c_str(),
           static_cast<uint64_t>(createBps.size()));
+
   // First resolve the breakpoints against the script file.
   std::vector<Breakpoint> bps;
   for (const auto& [id, line] : createBps) {
-    bps.emplace_back(Breakpoint{line});
+    if (id == 0ULL)
+    {
+      SDB_LOGD(kLogTag, "SetFileBreakpoints Invalid field 'id', must be > 0");
+    }
+    else if (line == 0U)
+    {
+      SDB_LOGD(kLogTag, "SetFileBreakpoints Invalid field 'line', must be > 0");
+    }
+    else {
+      bps.emplace_back(Breakpoint{id, line});
 
-    // todo: load file from disk, make sure line isn't empty.
-    resolvedBps.emplace_back(data::ResolvedBreakpoint{id, line, true});
+      // todo: load file from disk, make sure line isn't empty.
+      resolvedBps.emplace_back(data::ResolvedBreakpoint{id, line, true});
+
+      continue;
+    }
+
+    return ReturnCode::InvalidParameter;
   }
 
   {
@@ -321,25 +341,35 @@ ReturnCode SquirrelDebugger::SendStatus()
 
 void SquirrelDebugger::SquirrelNativeDebugHook(
         SQVM* const /*v*/, const SQInteger type, const SQChar* sourceName, const SQInteger line,
-        const SQChar* /*functionName*/)
+        const SQChar* functionName)
 {
   // 'c' called when a function has been called
   if (type == 'c') {
-    ++vmData_->currentStackDepth;
-    assert(vmData_->currentStackDepth < kDefaultStackSize);
-    if (pauseRequested_ != PauseType::None) {
+    const auto fileNameHandlePos = vmData_->fileNameHandles.find(sourceName);
+    BreakpointMap::FileNameHandle fileNameHandle;
+    if (fileNameHandlePos == vmData_->fileNameHandles.end()) {
       std::unique_lock lock(pauseMutex_);
-      if (pauseRequested_ != PauseType::None) {
-        if (pauseMutexData_->returnsRequired >= 0) {
-          ++pauseMutexData_->returnsRequired;
-        }
+      fileNameHandle = pauseMutexData_->breakpoints.EnsureFileNameHandle(sourceName);
+      vmData_->fileNameHandles.emplace(sourceName, fileNameHandle);
+    }
+    else {
+      fileNameHandle = fileNameHandlePos->second;
+    }
+
+    assert(vmData_->currentStack.size() < kDefaultStackSize);
+    vmData_->currentStack.emplace_back(internal::SquirrelVmDataImpl::StackInfo{fileNameHandle});
+
+    if (pauseRequested_ != PauseType::None)
+    {
+      if (pauseMutexData_->returnsRequired >= 0) {
+        ++pauseMutexData_->returnsRequired;
       }
     }
     // 'r' called when a function returns
   }
   else if (type == 'r') {
-    --vmData_->currentStackDepth;
-    assert(vmData_->currentStackDepth >= 0);
+    assert(!vmData_->currentStack.empty());
+    vmData_->currentStack.pop_back();
     if (pauseRequested_ != PauseType::None) {
       std::unique_lock lock(pauseMutex_);
       if (pauseRequested_ != PauseType::None) {
@@ -349,41 +379,38 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
     // 'l' called every line(that contains some code)
   }
   else if (type == 'l') {
-    if (pauseRequested_ == PauseType::None) {
-      std::unique_lock lock(pauseMutex_);
-      // Check for breakpoints
-      Breakpoint bp;
-      const std::string fileName{sourceName};
+    
+    Breakpoint bp = {};
+    const auto& handle = vmData_->currentStack.back().fileNameHandle;
 
-      // TODO: store a map of const char* to FileNameHandle. (after verifying that the const char* addresses don't constantly change...)
-      const auto handle = pauseMutexData_->breakpoints.FindFileNameHandle(fileName);
-      if (line >= 0 && line < INT32_MAX && handle != nullptr &&
-          pauseMutexData_->breakpoints.ReadBreakpoint(handle, static_cast<uint32_t>(line), bp))
-      {
-        // right now, only support basic breakpoints so no further interrogation is needed.
-        pauseRequested_ = PauseType::Pause;
-      }
+    // Check for breakpoints
+    std::unique_lock lock(pauseMutex_);
+    if (line >= 0 && line < INT32_MAX && handle != nullptr &&
+        pauseMutexData_->breakpoints.ReadBreakpoint(handle, static_cast<uint32_t>(line), bp))
+    {
+      // right now, only support basic breakpoints so no further interrogation is needed.
+      pauseMutexData_->returnsRequired = 0;
+      pauseRequested_ = PauseType::Pause;
     }
 
+    // Pause the thread if necessary
     if (pauseRequested_ != PauseType::None && pauseMutexData_->returnsRequired <= 0) {
-      std::unique_lock lock(pauseMutex_);
-      if (pauseRequested_ != PauseType::None && pauseMutexData_->returnsRequired <= 0) {
-        pauseMutexData_->isPaused = true;
+      pauseMutexData_->isPaused = true;
 
-        auto& status = pauseMutexData_->status;
-        status.runState = RunState::Paused;
+      auto& status = pauseMutexData_->status;
+      status.runState = RunState::Paused;
+      status.pausedAtBreakpointId = bp.id;
 
-        vmData_->PopulateStack(status.stack);
+      vmData_->PopulateStack(status.stack);
 
-        {
-          Status statusCopy = status;
-          eventInterface_->HandleStatusChanged(std::move(statusCopy));
-        }
-
-        // This Cv will be signaled whenever the value of pauseRequested_ changes.
-        pauseCv_.wait(lock);
-        pauseMutexData_->isPaused = false;
+      {
+        Status statusCopy = status;
+        eventInterface_->HandleStatusChanged(std::move(statusCopy));
       }
+
+      // This Cv will be signaled whenever the value of pauseRequested_ changes.
+      pauseCv_.wait(lock);
+      pauseMutexData_->isPaused = false;
     }
   }
 }

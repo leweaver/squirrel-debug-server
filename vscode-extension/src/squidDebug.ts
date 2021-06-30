@@ -74,9 +74,9 @@ export class SquidDebugSession extends DebugSession {
     public constructor(fileAccessor: FileAccessor) {
         super(false, false);
 
-        // this debugger uses zero-based lines and columns
-        this.setDebuggerLinesStartAt1(false);
-        this.setDebuggerColumnsStartAt1(false);
+        // this debugger uses one-based lines
+        this.setDebuggerLinesStartAt1(true);
+        this.setDebuggerColumnsStartAt1(true);
 
         this._runtime = new SquidRuntime(fileAccessor);
 

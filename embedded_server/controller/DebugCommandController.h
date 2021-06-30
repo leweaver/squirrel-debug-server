@@ -42,7 +42,6 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     return std::make_shared<DebugCommandController>(std::move(messageCommandInterface), objectMapper);
   }
 
-  
 
   ENDPOINT("PUT", "SendStatus", SendStatus)
   {
@@ -99,7 +98,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
 
   ENDPOINT(
-          "GET", "Variables/Local/{stackFrame}", StackLocals, PATH(Int32, stackFrame), QUERY(String, path),
+          "GET", "Variables/Local/{stackFrame}", StackLocals, PATH(UInt32, stackFrame), QUERY(String, path),
           QUERIES(QueryParams, queryParams))
   {
     return HandleVariablesCommandMessage(queryParams, [&](const data::PaginationInfo& pagination) {
@@ -131,9 +130,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     AddCommandMessageErrorResponses(info);
   }
 
-  ENDPOINT(
-          "PUT", "FileBreakpoints", FileBreakpoints,
-          BODY_DTO(Object<dto::SetFileBreakpointsRequest>, createBpRequest))
+  ENDPOINT("PUT", "FileBreakpoints", FileBreakpoints, BODY_DTO(Object<dto::SetFileBreakpointsRequest>, createBpRequest))
   {
     std::vector<data::CreateBreakpoint> bpList;
     for (const auto& bpDto : *createBpRequest->breakpoints) {

@@ -105,6 +105,7 @@ class Status : public oatpp::DTO {
 
   DTO_FIELD(Enum<RunState>, runstate);
   DTO_FIELD(List<Object<StackEntry>>, stack);
+  DTO_FIELD(UInt64, pausedAtBreakpointId);
 };
 
 class CreateBreakpoint : public oatpp::DTO

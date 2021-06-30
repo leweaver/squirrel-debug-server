@@ -37,13 +37,19 @@ export class StackEntry {
 }
 
 export class Status {
-    public runstate: Runstate = Runstate.running;
-    public stack: StackEntry[] = [];
+    public runstate: Runstate;
+    public stack: StackEntry[];
+    public pausedAtBreakpointId: number;
 
     constructor(instanceData?: any) {
         if (instanceData) {
             this.runstate = Runstate[instanceData.runstate as keyof typeof Runstate];
             this.stack = (instanceData.stack ?? []).map(d => new StackEntry(d));
+            this.pausedAtBreakpointId = instanceData.pausedAtBreakpointId;
+        } else {            
+            this.runstate = Runstate.running;
+            this.stack = [];
+            this.pausedAtBreakpointId = 0;
         }
     }
 }

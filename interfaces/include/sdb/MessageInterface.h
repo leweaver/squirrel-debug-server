@@ -33,6 +33,7 @@ struct StackEntry {
 struct Status {
   RunState runState = RunState::Paused;
   std::vector<StackEntry> stack;
+  uint64_t pausedAtBreakpointId = 0;
 };
 enum class VariableType {
   Null,
@@ -71,7 +72,9 @@ struct PaginationInfo {
   uint32_t count;
 };
 struct CreateBreakpoint {
+  // ID must be >= 1
   uint64_t id;
+  // Line must be >= 1
   uint32_t line;
 };
 struct ResolvedBreakpoint {
@@ -128,7 +131,7 @@ class MessageCommandInterface {
   /// </summary>
   [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetStackVariables(int32_t stackFrame, const std::string& path,
+  [[nodiscard]] virtual data::ReturnCode GetStackVariables(uint32_t stackFrame, const std::string& path,
                                                            const data::PaginationInfo& pagination,
                                                            std::vector<data::Variable>& variables) = 0;
 
