@@ -14,7 +14,11 @@ export interface FileAccessor {
     readFile(path: string): Promise<string>;
 }
 
-export interface ISquidBreakpoint {
+export interface ISquidCreateBreakpoint {
+    line: number;
+}
+
+export interface ISquidBreakpoint extends ISquidCreateBreakpoint {
     id: number;
     line: number;
     verified: boolean;
@@ -215,17 +219,6 @@ export class SquidRuntime extends EventEmitter {
                 resolvedBpDtos.forEach((bp: ResolvedBreakpoint) => {
                     this.sendEvent('breakpointValidated', bp);
                 });
-                // let sourceLines = await this.loadSource(path);
-                // bps.forEach(bp => {
-                //     if (bp.line >= sourceLines.length) {
-                //         return;
-                //     }
-
-                //     if (!bp.verified) {
-                //         bp.verified = true;
-                //         this.sendEvent('breakpointValidated', bp);
-                //     }
-                // });
             } else {
                 bps.forEach(bp => {
                     if (bp.verified = false) {
@@ -241,14 +234,14 @@ export class SquidRuntime extends EventEmitter {
     /**
      * Clears, then recreates all breakpoints for the given file. Will validate all breakpoints.
      */
-    public async setFileBreakpoints(path: string, lines: number[]): Promise<ISquidBreakpoint[]> {
+    public async setFileBreakpoints(path: string, newBreakpoints: ISquidCreateBreakpoint[]): Promise<ISquidBreakpoint[]> {
         logger.log("in setFileBreakpoints");
         this._breakPoints.delete(path);
-        let bps = new Array<ISquidBreakpoint>();
+        let bps = new Array<ResolvedBreakpoint>();
         this._breakPoints.set(path, bps);
         
-        for (const line of lines) {
-            const bp: ISquidBreakpoint = { verified: false, line, id: this._breakpointId++ };
+        for (const newBp of newBreakpoints) {
+            const bp: ResolvedBreakpoint = Object.assign({}, newBp, {id: this._breakpointId++, verified: false});
             bps.push(bp);
         }
         

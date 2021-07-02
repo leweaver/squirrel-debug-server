@@ -108,8 +108,7 @@ struct SquirrelVmDataImpl {
         SDB_LOGD(__FILE__, "No local with given index: %d", *pathParts.begin());
         return ReturnCode::InvalidParameter;
       }
-
-      //variable.name = *(pathParts.end() - 1);
+      
       rc = CreateChildVariablesFromIterable(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
       if (rc != ReturnCode::Success) {
         SDB_LOGI(__FILE__, "Failed to find stack variables for path: %s", path.c_str());

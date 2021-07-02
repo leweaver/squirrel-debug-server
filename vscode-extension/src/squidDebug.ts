@@ -150,6 +150,8 @@ export class SquidDebugSession extends DebugSession {
         // make VS Code support data breakpoints
         response.body.supportsDataBreakpoints = false;
 
+        response.body.supportsLogPoints = true;
+
         // make VS Code support completion in REPL
         response.body.supportsCompletionsRequest = true;
         response.body.completionTriggerCharacters = [ ".", "[" ];
@@ -224,14 +226,12 @@ export class SquidDebugSession extends DebugSession {
     protected async setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments): Promise<void> {
 
         const path = args.source.path as string;
-        const clientLines = args.lines || [];
-
+        const bps = (args.breakpoints || []).map(bp => ({line: bp.line}));
         
         logger.verbose('setBreakPointsRequest: ' + path);
 
         // set and verify breakpoint locations
-        const debuggerLines = clientLines.map(l => this.convertClientLineToDebugger(l));
-        const actualBreakpoints =  (await this._runtime.setFileBreakpoints(path, debuggerLines)).map(bp => new DeferredBreakpoint(bp.id, this.convertDebuggerLineToClient(bp.line), bp.verified));
+        const actualBreakpoints =  (await this._runtime.setFileBreakpoints(path, bps)).map(bp => new DeferredBreakpoint(bp.id, this.convertDebuggerLineToClient(bp.line), bp.verified));
 
         // send back the actual breakpoint positions
         response.body = {
