@@ -55,7 +55,12 @@ struct SquirrelVmDataImpl {
     SQStackInfos si;
     auto stackIdx = 0;
     while (SQ_SUCCEEDED(sq_stackinfos(vm, stackIdx, &si))) {
-      stack.push_back({std::string(si.source), si.line, std::string(si.funcname)});
+      uint32_t line = 0;
+
+      if (si.line > 0 && si.line <= INT32_MAX) {
+        line = static_cast<uint32_t>(si.line);
+      }
+      stack.push_back({std::string(si.source), line, std::string(si.funcname)});
       ++stackIdx;
     }
   }
@@ -108,7 +113,7 @@ struct SquirrelVmDataImpl {
         SDB_LOGD(__FILE__, "No local with given index: %d", *pathParts.begin());
         return ReturnCode::InvalidParameter;
       }
-      
+
       rc = CreateChildVariablesFromIterable(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
       if (rc != ReturnCode::Success) {
         SDB_LOGI(__FILE__, "Failed to find stack variables for path: %s", path.c_str());
@@ -147,6 +152,7 @@ struct SquirrelVmDataImpl {
 
   struct StackInfo {
     BreakpointMap::FileNameHandle fileNameHandle;
+    SQInteger line;
   };
   std::vector<StackInfo> currentStack;
   std::unordered_map<const SQChar*, BreakpointMap::FileNameHandle> fileNameHandles;
@@ -264,12 +270,10 @@ ReturnCode SquirrelDebugger::SetFileBreakpoints(
   // First resolve the breakpoints against the script file.
   std::vector<Breakpoint> bps;
   for (const auto& [id, line] : createBps) {
-    if (id == 0ULL)
-    {
+    if (id == 0ULL) {
       SDB_LOGD(kLogTag, "SetFileBreakpoints Invalid field 'id', must be > 0");
     }
-    else if (line == 0U)
-    {
+    else if (line == 0U) {
       SDB_LOGD(kLogTag, "SetFileBreakpoints Invalid field 'line', must be > 0");
     }
     else {
@@ -356,10 +360,9 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
     }
 
     assert(vmData_->currentStack.size() < kDefaultStackSize);
-    vmData_->currentStack.emplace_back(internal::SquirrelVmDataImpl::StackInfo{fileNameHandle});
+    vmData_->currentStack.emplace_back(internal::SquirrelVmDataImpl::StackInfo{fileNameHandle, line});
 
-    if (pauseRequested_ != PauseType::None)
-    {
+    if (pauseRequested_ != PauseType::None) {
       if (pauseMutexData_->returnsRequired >= 0) {
         ++pauseMutexData_->returnsRequired;
       }
@@ -378,12 +381,15 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
     // 'l' called every line(that contains some code)
   }
   else if (type == 'l') {
-    
+
     Breakpoint bp = {};
-    const auto& handle = vmData_->currentStack.back().fileNameHandle;
+    auto& currentStackHead = vmData_->currentStack.back();
+    currentStackHead.line = line;
+    const auto& handle = currentStackHead.fileNameHandle;
+
+    std::unique_lock lock(pauseMutex_);
 
     // Check for breakpoints
-    std::unique_lock lock(pauseMutex_);
     if (line >= 0 && line < INT32_MAX && handle != nullptr &&
         pauseMutexData_->breakpoints.ReadBreakpoint(handle, static_cast<uint32_t>(line), bp))
     {
@@ -401,7 +407,7 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
       status.pausedAtBreakpointId = bp.id;
 
       vmData_->PopulateStack(status.stack);
-      
+
       eventInterface_->HandleStatusChanged(status);
 
       // This Cv will be signaled whenever the value of pauseRequested_ changes.
@@ -410,6 +416,24 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
     }
   }
 }
+
+void SquirrelDebugger::SquirrelPrintCallback(HSQUIRRELVM vm, const bool isErr, const std::string_view str) const
+{
+  const auto& stackInfo = vmData_->currentStack.back();
+  uint32_t line = 0;
+  if (stackInfo.line > 0 && stackInfo.line <= INT32_MAX) {
+    line = static_cast<uint32_t>(stackInfo.line);
+  }
+
+  const data::OutputLine outputLine{
+          str,
+          isErr,
+          std::string_view(stackInfo.fileNameHandle.get()->data(), stackInfo.fileNameHandle.get()->size()),
+          line,
+  };
+  eventInterface_->HandleOutputLine(outputLine);
+}
+
 
 SQInteger SquirrelDebugger::DefaultStackSize()
 {

@@ -345,7 +345,7 @@ export class SquidRuntime extends EventEmitter {
     }
 
     private outputLine(outputLine: OutputLine) {
-        this.sendEvent('output', outputLine.output, outputLine.isErr ? 'stderr' : 'console');
+        this.sendEvent('output', outputLine.output, outputLine.isErr ? 'stderr' : 'console', outputLine.file, outputLine.line);
     }
 
     public async loadSource(file: string): Promise<string[]> {

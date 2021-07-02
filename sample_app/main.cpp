@@ -173,10 +173,19 @@ class SampleApp {
     EmbeddedServer::ShutdownEnvironment();
   }
 
-  void HandleOutputLine(const std::string_view str, const bool isErr) const
+  void HandleOutputLine(SQVM* const vm, const bool isErr, const SQChar* text, char* const args) const
   {
-    const sdb::data::OutputLine outputLine{str, isErr};
-    ep_->GetEventInterface()->HandleOutputLine(outputLine);
+    std::array<char, 1024> buffer;
+    const auto size = vsprintf_s(buffer.data(), 1024, text, args);
+    if (size > 0) {
+      const std::string_view str = {&buffer[0], static_cast<std::string_view::size_type>(size)};
+
+      auto* const debugger = DebuggerForVm(vm);
+      if (debugger != nullptr)
+      {
+        debugger->SquirrelPrintCallback(vm, isErr, str);
+      }
+    }
   }
 
   SquirrelDebugger* DebuggerForVm(SQVM* const vm) const
@@ -202,36 +211,18 @@ class SampleApp {
 
 void SquirrelPrintCallback(HSQUIRRELVM vm, const SQChar* text, ...)
 {
-  std::array<char, 1024> buffer;
-
   va_list vl;
   va_start(vl, text);
-  const auto size = vsprintf_s(buffer.data(), 1024, text, vl);
+  SampleApp::Instance().HandleOutputLine(vm, false, text, vl);
   va_end(vl);
-
-  if (size > 0) {
-    const std::string_view str = {&buffer[0], static_cast<std::string_view::size_type>(size)};
-    cout << str.data() << endl;
-
-    SampleApp::Instance().HandleOutputLine(str, false);
-  }
 }
 
 void SquirrelPrintErrCallback(HSQUIRRELVM vm, const SQChar* text, ...)
 {
-  std::array<char, 1024> buffer;
-
   va_list vl;
   va_start(vl, text);
-  const auto size = vsprintf_s(buffer.data(), 1024, text, vl);
+  SampleApp::Instance().HandleOutputLine(vm, true, text, vl);
   va_end(vl);
-
-  if (size > 0) {
-    const std::string_view str = {&buffer[0], static_cast<std::string_view::size_type>(size)};
-    cout << str.data() << endl;
-
-    SampleApp::Instance().HandleOutputLine(str, true);
-  }
 }
 
 void SquirrelNativeDebugHook(

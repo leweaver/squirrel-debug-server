@@ -31,30 +31,34 @@ class SquirrelDebugger final : public MessageCommandInterface {
   SquirrelDebugger& operator=(const SquirrelDebugger&) = delete;
   SquirrelDebugger& operator=(SquirrelDebugger&&) = delete;
 
-  // The following methods are called from the networking thread.
+  // Initialization - should be called before any threads are started.
+  void SetEventInterface(std::shared_ptr<MessageEventInterface> eventInterface);
+  void AddVm(HSQUIRRELVM vm);
+
+  // The following methods may be called from any thread.
   [[nodiscard]] data::ReturnCode PauseExecution() override;
   [[nodiscard]] data::ReturnCode ContinueExecution() override;
   [[nodiscard]] data::ReturnCode StepOut() override;
   [[nodiscard]] data::ReturnCode StepOver() override;
   [[nodiscard]] data::ReturnCode StepIn() override;
   [[nodiscard]] data::ReturnCode SendStatus() override;
-  [[nodiscard]] data::ReturnCode GetStackVariables(uint32_t stackFrame, const std::string& path,
-                                                   const data::PaginationInfo& pagination,
-                                                   std::vector<data::Variable>& variables) override;
+  [[nodiscard]] data::ReturnCode GetStackVariables(
+          uint32_t stackFrame, const std::string& path, const data::PaginationInfo& pagination,
+          std::vector<data::Variable>& variables) override;
 
-  [[nodiscard]] data::ReturnCode GetGlobalVariables(const std::string& path, const data::PaginationInfo& pagination,
-                                                    std::vector<data::Variable>& variables) override;
+  [[nodiscard]] data::ReturnCode GetGlobalVariables(
+          const std::string& path, const data::PaginationInfo& pagination,
+          std::vector<data::Variable>& variables) override;
 
-  [[nodiscard]] data::ReturnCode SetFileBreakpoints(const std::string& file,
-                                                    const std::vector<data::CreateBreakpoint>& createBps,
-                                                    std::vector<data::ResolvedBreakpoint>& resolvedBps) override;
+  [[nodiscard]] data::ReturnCode SetFileBreakpoints(
+          const std::string& file, const std::vector<data::CreateBreakpoint>& createBps,
+          std::vector<data::ResolvedBreakpoint>& resolvedBps) override;
 
-  // The following methods are called from the scripting engine thread
-  void SetEventInterface(std::shared_ptr<MessageEventInterface> eventInterface);
-  void AddVm(HSQUIRRELVM vm);
-  void SquirrelNativeDebugHook(HSQUIRRELVM v, SQInteger type, const SQChar* sourceName, SQInteger line,
-                               const SQChar* functionName);
-
+  // The following methods should be called from the scripting engine (VM) thread in response to Squirrel Debug Hooks.
+  void SquirrelNativeDebugHook(
+          HSQUIRRELVM v, SQInteger type, const SQChar* sourceName, SQInteger line, const SQChar* functionName);
+  void SquirrelPrintCallback(HSQUIRRELVM vm, bool isErr, std::string_view str) const;
+  
   // Configuration
   static SQInteger DefaultStackSize();
 
@@ -78,7 +82,8 @@ class SquirrelDebugger final : public MessageCommandInterface {
   // Incremented whenever breakpoints are modified.
   std::atomic_uint64_t breakpointMapChangeCount_;
 
-  // This must only be accessed within the Squirrel Execution Thread.
+  // This must only be accessed within the Squirrel Execution Thread (in the debug callback), or,
+  // from another thread IIF Squirrel Execution Thread is currently stopped on the pause mutex.
   internal::SquirrelVmDataImpl* vmData_;
 };
 }// namespace sdb

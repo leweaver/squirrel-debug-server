@@ -7,6 +7,7 @@
 #define SDB_MESSAGE_INTERFACE_H
 
 #include <cinttypes>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -27,7 +28,7 @@ enum class ReturnCode {
 enum class RunState { Running = 0, Pausing = 1, Paused = 2, Stepping = 3 };
 struct StackEntry {
   std::string file;
-  int64_t line;
+  uint32_t line;
   std::string function;
 };
 struct Status {
@@ -38,8 +39,10 @@ struct Status {
 
 struct OutputLine
 {
-  std::string_view output;
+  std::string_view const output;
   bool isErr = false;
+  std::string_view const fileName;
+  uint32_t line;
 };
 enum class VariableType {
   Null,

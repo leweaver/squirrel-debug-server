@@ -27,6 +27,7 @@
 
 using oatpp::parser::json::mapping::ObjectMapper;
 using oatpp::data::mapping::type::Void;
+using oatpp::data::mapping::type::String;
 
 namespace sdb {
 
@@ -58,8 +59,10 @@ class OatMessageEventInterface : public MessageEventInterface {
   void HandleOutputLine(const data::OutputLine& outputLine) override
   {
     const auto outputLineDto = dto::OutputLine::createShared();
-    outputLineDto->output = oatpp::data::mapping::type::String(outputLine.output.data(), static_cast<v_buff_size>(outputLine.output.size()), false);
+    outputLineDto->output = String(outputLine.output.data(), static_cast<v_buff_size>(outputLine.output.size()), false);
     outputLineDto->isErr = outputLine.isErr;
+    outputLineDto->file = String(outputLine.fileName.data(), static_cast<v_buff_size>(outputLine.fileName.size()), false);
+    outputLineDto->line = outputLine.line;
     
     const auto wrapper = dto::EventMessageWrapper<dto::OutputLine>::createShared();
     wrapper->type = dto::EventMessageType::OutputLine;

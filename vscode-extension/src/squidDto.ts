@@ -59,14 +59,20 @@ export class Status {
 export class OutputLine {
     public output: string;
     public isErr: boolean;
+    public file: string;
+    public line: number;
 
     constructor(instanceData?: any) {
         if (instanceData) {
             this.output = instanceData.output;
             this.isErr = instanceData.isErr;
+            this.file = instanceData.file;
+            this.line = instanceData.line;
         } else {
             this.output = '';
             this.isErr = false;
+            this.file = '';
+            this.line = 0;
         }
     }
 }

@@ -96,7 +96,7 @@ class StackEntry : public oatpp::DTO {
   DTO_INIT(StackEntry, DTO)
 
   DTO_FIELD(String, file);
-  DTO_FIELD(Int64, line);
+  DTO_FIELD(UInt32, line);
   DTO_FIELD(String, function);
 };
 
@@ -115,6 +115,8 @@ class OutputLine : public oatpp::DTO
 
   DTO_FIELD(String, output);
   DTO_FIELD(Boolean, isErr);
+  DTO_FIELD(String, file);
+  DTO_FIELD(Int32, line);
 };
 
 class CreateBreakpoint : public oatpp::DTO
