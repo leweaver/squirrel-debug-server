@@ -11,7 +11,7 @@ First versioned release, 'MVP'
 [x] Output redirection & capture
 [x] Coding standards and formatting
 [x] Better debug logging
-[ ] Run sample exe with arguments
+[x] Run sample exe with arguments
 [ ] Hover-evaluation
 [ ] Copyright headers
 
