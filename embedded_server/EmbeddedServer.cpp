@@ -79,11 +79,14 @@ class OatMessageEventInterface : public MessageEventInterface {
 class EndpointImpl : public EmbeddedServer {
 
  public:
+  explicit EndpointImpl(const ListenerConfig& config)
+  {
+    appComponents_ = std::make_shared<AppComponents>(config);
+  }
+
   void SetCommandInterface(const std::shared_ptr<MessageCommandInterface> messageCommandInterface) override {
 
-    /* create ApiControllers and add endpoints to router */
-    appComponents_ = std::make_shared<AppComponents>();
-
+    /* create ApiControllers and add endpoints to router */    
     OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, router);
     OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::handler::ErrorHandler>, errorHandler);
 
@@ -111,7 +114,8 @@ class EndpointImpl : public EmbeddedServer {
     swaggerController_ = oatpp::swagger::Controller::createShared(docEndpoints);
     swaggerController_->addEndpointsToRouter(router);
 
-    eventInterface_ = std::make_shared<OatMessageEventInterface>(appComponents_->webSocketInstanceListener);
+    OATPP_COMPONENT(std::shared_ptr<WSInstanceListener>, webSocketInstanceListener);
+    eventInterface_ = std::make_shared<OatMessageEventInterface>(webSocketInstanceListener);
   }
 
   [[nodiscard]] std::shared_ptr<MessageEventInterface> GetEventInterface() const override {
@@ -121,6 +125,7 @@ class EndpointImpl : public EmbeddedServer {
   void Start() override {
     /* create server */
     worker_ = std::thread([stopping = this->stopping_]() {
+
       /* Get connection handler component */
       OATPP_COMPONENT(std::shared_ptr<oatpp::network::ConnectionHandler>, connectionHandler, "http");
 
@@ -128,11 +133,11 @@ class EndpointImpl : public EmbeddedServer {
       OATPP_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, connectionProvider);
       oatpp::network::Server server(connectionProvider, connectionHandler);
 
-      OATPP_LOGD(kTag, "Running on port %s...", connectionProvider->getProperty("port").toString()->c_str());
+      OATPP_LOGD(kTag, "Running on port %s...", connectionProvider->getProperty("port").toString()->c_str())
 
       server.run([stopping]() { return !*stopping; });
 
-      OATPP_LOGD(kTag, "Stopped");
+      OATPP_LOGD(kTag, "Stopped")
     });
   }
 
@@ -157,8 +162,11 @@ private:
   static constexpr const char* kTag = "EmbeddedServer";
 };
 
-EmbeddedServer* EmbeddedServer::Create() {
-  return new EndpointImpl();
+EmbeddedServer* EmbeddedServer::Create(const uint16_t port)
+{
+  ListenerConfig config;
+  config.port = port;
+  return new EndpointImpl(config);
 }
 
 void EmbeddedServer::InitEnvironment() {

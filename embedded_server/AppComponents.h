@@ -7,7 +7,6 @@
 #ifndef APP_COMPONENTS_H
 #define APP_COMPONENTS_H
 
-
 #include <oatpp/parser/json/mapping/ObjectMapper.hpp>
 
 #include <oatpp/network/tcp/server/ConnectionProvider.hpp>
@@ -15,23 +14,25 @@
 
 #include <oatpp/core/macro/component.hpp>
 
+#include "ListenerConfig.h"
 #include "RequestErrorHandler.h"
 #include "SwaggerComponent.h"
 #include "websocket/WSListener.h"
 
 namespace sdb {
 
-const char* const kDefaultHostname = "localhost";
-const uint32_t kDefaultPort = 8000U;
-
 /**
  *  Class which creates and holds Application components and registers components in oatpp::base::Environment
  *  Order of components initialization is from top to bottom
  */
 struct AppComponents {
-  explicit AppComponents()
-      : webSocketInstanceListener(CreateWebSocketInstanceListener())
-      , webSocketConnectionHandler(CreateWebSocketConnectionHandler(webSocketInstanceListener))
+  explicit AppComponents(const ListenerConfig& config)
+      : swaggerComponent(std::make_shared<SwaggerComponent>(config))
+      , serverConnectionProvider(oatpp::network::tcp::server::ConnectionProvider::createShared(
+                {config.hostName.c_str(), config.port, oatpp::network::Address::IP_4}))
+      , webSocketInstanceListener(CreateWebSocketInstanceListener())
+      , webSocketConnectionHandler(CreateWebSocketConnectionHandler(webSocketInstanceListener.getObject()))
+
   {}
 
   static oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>>
@@ -51,16 +52,13 @@ struct AppComponents {
   /*
    *  Swagger component
    */
-  SwaggerComponent swaggerComponent;
+  oatpp::base::Environment::Component<std::shared_ptr<SwaggerComponent>> swaggerComponent;
 
   /*
    *  Create ConnectionProvider component which listens on the port
    */
-  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, serverConnectionProvider)
-  ([] {
-    return oatpp::network::tcp::server::ConnectionProvider::createShared(
-            {kDefaultHostname, kDefaultPort, oatpp::network::Address::IP_4});
-  }());
+  oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ServerConnectionProvider>>
+          serverConnectionProvider;
 
   /*
    *  Create ErrorHandler
@@ -95,7 +93,7 @@ struct AppComponents {
     return objectMapper;
   }());
 
-  std::shared_ptr<WSInstanceListener> webSocketInstanceListener;
+  oatpp::base::Environment::Component<std::shared_ptr<WSInstanceListener>> webSocketInstanceListener;
   oatpp::base::Environment::Component<std::shared_ptr<oatpp::network::ConnectionHandler>> webSocketConnectionHandler;
 };
 }// namespace sdb

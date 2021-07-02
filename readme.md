@@ -8,21 +8,21 @@ First versioned release, 'MVP'
 [x] Stack-Local variables
 [x] Global Variables
 [x] Simple Breakpoints
+[x] Output redirection & capture
+[x] Coding standards and formatting
+[x] Better debug logging
 [ ] Run sample exe with arguments
-[ ] Output redirection & capture
 [ ] Hover-evaluation
-[ ] Coding standards and formatting
 [ ] Copyright headers
-[ ] Better debug logging
 
-## Next release
+## Not Supported
 [ ] Multiple VM's (threads)
 [ ] Improved output of variables in inspector
 [ ] Conditional breakpoints
 [ ] Modification of variable values (int and string only?)
-[ ] Immediate window for execution?
+[ ] Immediate window for execution
 [ ] MacOS / Linux support
-[ ] Full squirrel unicode support
+[ ] squirrel unicode builds
 
 Setup:
 

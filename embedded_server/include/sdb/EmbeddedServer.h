@@ -27,7 +27,7 @@ class EmbeddedServer {
   static void ShutdownEnvironment();
 
   // Creates a new instance. Should be called after the environment has been initialized.
-  [[nodiscard]] static EmbeddedServer* Create();
+  [[nodiscard]] static EmbeddedServer* Create(uint16_t port);
 
   [[nodiscard]] virtual std::shared_ptr<MessageEventInterface> GetEventInterface() const = 0;
   virtual void SetCommandInterface(std::shared_ptr<MessageCommandInterface> messageCommandInterface) = 0;

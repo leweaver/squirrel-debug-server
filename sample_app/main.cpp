@@ -16,6 +16,8 @@
 #include <sqstdstring.h>
 #include <sqstdsystem.h>
 
+#include <tclap/CmdLine.h>
+
 #include <array>
 #include <cassert>
 #include <cstdarg>
@@ -35,7 +37,7 @@ using std::endl;
 
 constexpr auto kPLogInstanceId = PLOG_DEFAULT_INSTANCE_ID;
 
-SQInteger File_LexFeedAscii(SQUserPointer file)
+SQInteger SquirrelFileLexFeedAscii(SQUserPointer file)
 {
   char c = 0;
   if (fread(&c, sizeof(c), 1, static_cast<FILE*>(file)) > 0) {
@@ -44,26 +46,10 @@ SQInteger File_LexFeedAscii(SQUserPointer file)
   return 0;
 }
 
-SQRESULT CompileFile(SQVM* const v, const char* filename)
-{
-  FILE* fpRaw = nullptr;
-  fopen_s(&fpRaw, filename, "rb");
-  if (fpRaw != nullptr) {
-    const std::unique_ptr<std::FILE, decltype(&std::fclose)> fp = {fpRaw, &std::fclose};
-    const auto res = sq_compile(v, File_LexFeedAscii, fp.get(), filename, 1);
-    if (SQ_FAILED(res)) {
-      cerr << "Failed to compile" << endl;
-    }
-    return res;
-  }
-  cerr << "File doesn't exist" << endl;
-  return SQ_ERROR;
-}
-
 void SquirrelOnCompileError(
         HSQUIRRELVM /*v*/, const SQChar* desc, const SQChar* source, const SQInteger line, const SQInteger column)
 {
-  cerr << "Failed to compile script: " << source << ": " << line << " (col " << column << ")" << desc;
+  PLOGE << "Failed to compile script: " << source << ": " << line << " (col " << column << ")" << desc;
 }
 
 void SquirrelPrintCallback(HSQUIRRELVM vm, const SQChar* text, ...);
@@ -77,16 +63,24 @@ void SquirrelNativeDebugHook(SQVM* v, SQInteger type, const SQChar* sourceName, 
  */
 class SampleApp {
  public:
+  struct InitArgs {
+    uint16_t debuggerPort = 8000U;
+  };
+  struct RunArgs {
+    std::string file;
+    bool breakOnStart = false;
+  };
+
   static SampleApp& Instance()
   {
     static SampleApp instance;
     return instance;
   }
 
-  void Initialize()
+  void Initialize(const InitArgs& args)
   {
     EmbeddedServer::InitEnvironment();
-    ep_.reset(EmbeddedServer::Create());
+    ep_.reset(EmbeddedServer::Create(args.debuggerPort));
 
     debugger_ = std::make_shared<SquirrelDebugger>();
     ep_->SetCommandInterface(debugger_);
@@ -95,7 +89,7 @@ class SampleApp {
     ep_->Start();
   }
 
-  void Run()
+  void Run(const RunArgs& args)
   {
     HSQUIRRELVM v = sq_open(SquirrelDebugger::DefaultStackSize());
     {
@@ -103,29 +97,19 @@ class SampleApp {
       runningVms_.push_back({v, debugger_});
     }
 
-    // Forward squirrel print & errors to cout/cerr
+    // Forward squirrel print & errors streams
     sq_setprintfunc(v, SquirrelPrintCallback, SquirrelPrintErrCallback);
-
-    // File to Run
-    const std::string fileName = R"(C:\repos\vscode-quirrel-debugger\sample_app\scripts\hello_world.nut)";
 
     // Enable debugging hooks
     if (debugger_) {
       debugger_->AddVm(v);
-#if 0
-    const std::vector < sdb::data::CreateBreakpoint> bps{{ 0ULL, 43U } };
-    std::vector<sdb::data::ResolvedBreakpoint> resolvedBps;
-    const auto rc = debugger->SetFileBreakpoints(fileName, bps, resolvedBps);
-    if (rc != ReturnCode::Success) {
-      cerr << "Failed to set BP on startup";
-    }
-#endif
-#if 1
-      const auto rc = debugger_->PauseExecution();
-      if (rc != ReturnCode::Success) {
-        cerr << "Failed to pause on startup";
+      if (args.breakOnStart) {
+        const auto rc = debugger_->PauseExecution();
+        if (rc != ReturnCode::Success) {
+          cerr << "Failed to pause on startup";
+        }
       }
-#endif
+
       sq_enabledebuginfo(v, SQTrue);
       sq_setnativedebughook(v, &SquirrelNativeDebugHook);
     }
@@ -139,7 +123,7 @@ class SampleApp {
 
     // Load and execute file
     sq_setcompilererrorhandler(v, SquirrelOnCompileError);
-    if (SQ_SUCCEEDED(CompileFile(v, fileName.c_str()))) {
+    if (SQ_SUCCEEDED(CompileFile(v, args.file.c_str()))) {
       sq_pushroottable(v);
 
       if (SQ_FAILED(sq_call(v, 1 /* root table */, SQFalse, SQTrue))) {
@@ -163,8 +147,6 @@ class SampleApp {
 
   void Teardown()
   {
-    const SampleApp& instance = Instance();
-
     if (ep_ != nullptr) {
       ep_->Stop(true);
       ep_.reset();
@@ -181,9 +163,15 @@ class SampleApp {
       const std::string_view str = {&buffer[0], static_cast<std::string_view::size_type>(size)};
 
       auto* const debugger = DebuggerForVm(vm);
-      if (debugger != nullptr)
-      {
+      if (debugger != nullptr) {
         debugger->SquirrelPrintCallback(vm, isErr, str);
+      }
+
+      if (isErr) {
+        PLOGE << str;
+      }
+      else {
+        PLOGI << str;
       }
     }
   }
@@ -197,6 +185,22 @@ class SampleApp {
 
  private:
   SampleApp() = default;
+
+  static SQRESULT CompileFile(SQVM* const v, const char* filename)
+  {
+    FILE* fpRaw = nullptr;
+    fopen_s(&fpRaw, filename, "rb");
+    if (fpRaw != nullptr) {
+      const std::unique_ptr<std::FILE, decltype(&std::fclose)> fp = {fpRaw, &std::fclose};
+      const auto res = sq_compile(v, SquirrelFileLexFeedAscii, fp.get(), filename, 1);
+      if (SQ_FAILED(res)) {
+        PLOGE << "Failed to compile" << endl;
+      }
+      return res;
+    }
+    PLOGE << "File doesn't exist" << endl;
+    return SQ_ERROR;
+  }
 
   std::unique_ptr<EmbeddedServer> ep_;
   std::shared_ptr<SquirrelDebugger> debugger_;
@@ -294,7 +298,7 @@ void WrapWithTries(bool& ioShouldContinue, T& oStream, const char* failMessageDe
   }
 }
 
-int main(int /*argc*/, char** /*argv*/)
+int main(int argc, char** argv)
 {
   bool shouldContinue = true;
 
@@ -304,11 +308,41 @@ int main(int /*argc*/, char** /*argv*/)
     plog::init(plog::verbose, &consoleAppender);
   });
 
-  WrapWithTries(shouldContinue, cerr, "Initializing Environment", [&]() { SampleApp::Instance().Initialize(); });
+  auto initArgs = SampleApp::InitArgs{};
+  auto runArgs = SampleApp::RunArgs{};
+  WrapWithTries(shouldContinue, cerr, "Reading arguments", [argc, argv, &initArgs, &runArgs]() {
+    try {
+      TCLAP::CmdLine cmd("Command description message", ' ', "0.9");
+      TCLAP::ValueArg fileArg("f", "file", "Squirrel file to run", true, runArgs.file, "string");
+      cmd.add(fileArg);
+      const TCLAP::SwitchArg breakOnStart(
+              "s", "stop_on_start", "If set, the script will pause execution on the first line", cmd,
+              runArgs.breakOnStart);
+      TCLAP::ValueArg portArg(
+              "p", "port", "Network port which the debugger will listen on", false, initArgs.debuggerPort,
+              "unsigned integer");
+      cmd.add(portArg);
 
-  WrapWithTries(shouldContinue, cerr, "Running", [&]() { SampleApp::Instance().Run(); });
+      cmd.parse(argc, argv);
 
-  WrapWithTries(shouldContinue, cerr, "Teardown", [&]() { SampleApp::Instance().Teardown(); });
+      runArgs.file = fileArg.getValue();
+      runArgs.breakOnStart = breakOnStart.getValue();
+      initArgs.debuggerPort = portArg.getValue();
+    }
+    catch (TCLAP::ArgException& e) {
+      std::stringstream ss;
+      ss << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+      throw std::runtime_error(ss.str());
+    }
+  });
+
+  WrapWithTries(shouldContinue, cerr, "Initializing Environment", [&initArgs] {
+    SampleApp::Instance().Initialize(initArgs);
+  });
+
+  WrapWithTries(shouldContinue, cerr, "Running", [&runArgs] { SampleApp::Instance().Run(runArgs); });
+
+  WrapWithTries(shouldContinue, cerr, "Teardown", [] { SampleApp::Instance().Teardown(); });
 
   return shouldContinue ? 0 : 1;
 }

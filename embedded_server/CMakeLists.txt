@@ -22,7 +22,7 @@ add_library(${PROJECT_NAME} STATIC
     "websocket/WSListener.cpp"
     "controller/StaticController.h"
     "controller/WebsocketController.h" 
-    "RequestErrorHandler.h")
+    "RequestErrorHandler.h" "ListenerConfig.h")
 
 add_library(sdb::embedded_server ALIAS embedded_server)
 

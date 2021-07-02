@@ -24,6 +24,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(plog)
 
+FetchContent_Declare(
+    tclap
+    GIT_REPOSITORY https://github.com/mirror/tclap.git
+    # v1.4
+    GIT_TAG 35a173f7897df985697f4c4d282451b9dafe1b61
+)
+FetchContent_MakeAvailable(tclap)
+
+target_include_directories(${PROJECT_NAME} PRIVATE "${tclap_SOURCE_DIR}/include")
 target_link_libraries(${PROJECT_NAME}
         plog::plog
         sdb::interfaces
