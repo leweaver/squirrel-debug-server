@@ -35,7 +35,7 @@ class OatMessageEventInterface : public MessageEventInterface {
   explicit OatMessageEventInterface(std::shared_ptr<WSInstanceListener> webSocketInstanceListener)
       : webSocketInstanceListener_(std::move(webSocketInstanceListener)) {}
 
-  void HandleStatusChanged(data::Status&& status) override {
+  void HandleStatusChanged(const data::Status& status) override {
     const auto statusDto = dto::Status::createShared();
     statusDto->runstate = static_cast<sdb::dto::RunState>(status.runState);
     statusDto->stack = oatpp::List<oatpp::Object<dto::StackEntry>>::createShared();
@@ -51,6 +51,19 @@ class OatMessageEventInterface : public MessageEventInterface {
     const auto wrapper = dto::EventMessageWrapper<dto::Status>::createShared();
     wrapper->type = dto::EventMessageType::Status;
     wrapper->message = statusDto;
+
+    webSocketInstanceListener_->broadcastMessage(mapper_->writeToString(wrapper));
+  }
+
+  void HandleOutputLine(const data::OutputLine& outputLine) override
+  {
+    const auto outputLineDto = dto::OutputLine::createShared();
+    outputLineDto->output = oatpp::data::mapping::type::String(outputLine.output.data(), static_cast<v_buff_size>(outputLine.output.size()), false);
+    outputLineDto->isErr = outputLine.isErr;
+    
+    const auto wrapper = dto::EventMessageWrapper<dto::OutputLine>::createShared();
+    wrapper->type = dto::EventMessageType::OutputLine;
+    wrapper->message = outputLineDto;
 
     webSocketInstanceListener_->broadcastMessage(mapper_->writeToString(wrapper));
   }

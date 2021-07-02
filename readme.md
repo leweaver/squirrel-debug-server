@@ -7,7 +7,7 @@ First versioned release, 'MVP'
 [x] HTTP Command interface
 [x] Stack-Local variables
 [x] Global Variables
-[ ] Simple Breakpoints
+[x] Simple Breakpoints
 [ ] Run sample exe with arguments
 [ ] Output redirection & capture
 [ ] Hover-evaluation

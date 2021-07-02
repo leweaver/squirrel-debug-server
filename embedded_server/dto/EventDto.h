@@ -22,7 +22,8 @@ ENUM(CommandMessageType, v_int32,
     VALUE(SendStatus, 5, "send_status"))
 
 ENUM(EventMessageType, v_int32,
-    VALUE(Status,     0, "status"))
+    VALUE(Status,     0, "status"),
+    VALUE(OutputLine, 1, "output_line"))
 
 ENUM(RunState, v_int32,
     VALUE(Running,    0, "running"),
@@ -106,6 +107,14 @@ class Status : public oatpp::DTO {
   DTO_FIELD(Enum<RunState>, runstate);
   DTO_FIELD(List<Object<StackEntry>>, stack);
   DTO_FIELD(UInt64, pausedAtBreakpointId);
+};
+
+class OutputLine : public oatpp::DTO
+{
+  DTO_INIT(OutputLine, DTO)
+
+  DTO_FIELD(String, output);
+  DTO_FIELD(Boolean, isErr);
 };
 
 class CreateBreakpoint : public oatpp::DTO

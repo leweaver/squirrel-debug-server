@@ -2,7 +2,9 @@
 
 
 export enum EventMessageType {
-    status = 0
+    status = 0,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    output_line
 }
 
 export class EventMessage {
@@ -50,6 +52,21 @@ export class Status {
             this.runstate = Runstate.running;
             this.stack = [];
             this.pausedAtBreakpointId = 0;
+        }
+    }
+}
+
+export class OutputLine {
+    public output: string;
+    public isErr: boolean;
+
+    constructor(instanceData?: any) {
+        if (instanceData) {
+            this.output = instanceData.output;
+            this.isErr = instanceData.isErr;
+        } else {
+            this.output = '';
+            this.isErr = false;
         }
     }
 }

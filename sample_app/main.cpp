@@ -66,64 +66,52 @@ void SquirrelOnCompileError(
   cerr << "Failed to compile script: " << source << ": " << line << " (col " << column << ")" << desc;
 }
 
-void SquirrelPrintCallback(HSQUIRRELVM vm, const SQChar* text, ...)
-{
-  char buffer[1024];
+void SquirrelPrintCallback(HSQUIRRELVM vm, const SQChar* text, ...);
 
-  va_list vl;
-  va_start(vl, text);
-  vsprintf_s(buffer, 1024, text, vl);
-  va_end(vl);
+void SquirrelPrintErrCallback(HSQUIRRELVM vm, const SQChar* text, ...);
 
-  cout << buffer << endl;
-}
+void SquirrelNativeDebugHook(SQVM* v, SQInteger type, const SQChar* sourceName, SQInteger line, const SQChar* funcName);
 
-void SquirrelPrintErrCallback(HSQUIRRELVM vm, const SQChar* text, ...)
-{
-  char buffer[1024];
-
-  va_list vl;
-  va_start(vl, text);
-  vsprintf_s(buffer, 1024, text, vl);
-  va_end(vl);
-
-  cerr << buffer << endl;
-}
-
-
-struct VmInfo {
-  HSQUIRRELVM v;
-  std::shared_ptr<SquirrelDebugger> debugger;
-};
-std::vector<VmInfo> vms;
-std::mutex vmsMutex;
-
-void SquirrelNativeDebugHook(
-        SQVM* const v, const SQInteger type, const SQChar* sourceName, const SQInteger line,
-        const SQChar* const funcName)
-{
-  auto iter = std::find_if(vms.begin(), vms.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
-  assert(iter != vms.end());
-  iter->debugger->SquirrelNativeDebugHook(v, type, sourceName, line, funcName);
-}
-
-void Run(std::shared_ptr<SquirrelDebugger> debugger)
-{
-  HSQUIRRELVM v = sq_open(SquirrelDebugger::DefaultStackSize());
+/**
+ * A singleton that contains app globals.
+ */
+class SampleApp {
+ public:
+  static SampleApp& Instance()
   {
-    std::lock_guard lock(vmsMutex);
-    vms.push_back({v, debugger});
+    static SampleApp instance;
+    return instance;
   }
 
-  // Forward squirrel print & errors to cout/cerr
-  sq_setprintfunc(v, SquirrelPrintCallback, SquirrelPrintErrCallback);
+  void Initialize()
+  {
+    EmbeddedServer::InitEnvironment();
+    ep_.reset(EmbeddedServer::Create());
 
-  // File to Run
-  const std::string fileName = R"(C:\repos\vscode-quirrel-debugger\sample_app\scripts\hello_world.nut)";
+    debugger_ = std::make_shared<SquirrelDebugger>();
+    ep_->SetCommandInterface(debugger_);
+    debugger_->SetEventInterface(ep_->GetEventInterface());
 
-  // Enable debugging hooks
-  if (debugger) {
-    debugger->AddVm(v);
+    ep_->Start();
+  }
+
+  void Run()
+  {
+    HSQUIRRELVM v = sq_open(SquirrelDebugger::DefaultStackSize());
+    {
+      std::lock_guard lock(vmsMutex_);
+      runningVms_.push_back({v, debugger_});
+    }
+
+    // Forward squirrel print & errors to cout/cerr
+    sq_setprintfunc(v, SquirrelPrintCallback, SquirrelPrintErrCallback);
+
+    // File to Run
+    const std::string fileName = R"(C:\repos\vscode-quirrel-debugger\sample_app\scripts\hello_world.nut)";
+
+    // Enable debugging hooks
+    if (debugger_) {
+      debugger_->AddVm(v);
 #if 0
     const std::vector < sdb::data::CreateBreakpoint> bps{{ 0ULL, 43U } };
     std::vector<sdb::data::ResolvedBreakpoint> resolvedBps;
@@ -133,47 +121,132 @@ void Run(std::shared_ptr<SquirrelDebugger> debugger)
     }
 #endif
 #if 1
-    const auto rc = debugger->PauseExecution();
-    if (rc != ReturnCode::Success) {
-      cerr << "Failed to pause on startup";
-    }
+      const auto rc = debugger_->PauseExecution();
+      if (rc != ReturnCode::Success) {
+        cerr << "Failed to pause on startup";
+      }
 #endif
-    sq_enabledebuginfo(v, SQTrue);
-    sq_setnativedebughook(v, &SquirrelNativeDebugHook);
-  }
-
-  // Register stdlibs
-  sq_pushroottable(v);
-  sqstd_register_iolib(v);
-  sqstd_register_mathlib(v);
-  sqstd_register_stringlib(v);
-  sqstd_register_systemlib(v);
-
-  // Load and execute file
-  sq_setcompilererrorhandler(v, SquirrelOnCompileError);
-  if (SQ_SUCCEEDED(CompileFile(v, fileName.c_str()))) {
-    sq_pushroottable(v);
-
-    if (SQ_FAILED(sq_call(v, 1 /* root table */, SQFalse, SQTrue))) {
-      cerr << "Failed to call global method" << endl;
+      sq_enabledebuginfo(v, SQTrue);
+      sq_setnativedebughook(v, &SquirrelNativeDebugHook);
     }
-    sq_pop(v, 1);// Pop function
+
+    // Register stdlibs
+    sq_pushroottable(v);
+    sqstd_register_iolib(v);
+    sqstd_register_mathlib(v);
+    sqstd_register_stringlib(v);
+    sqstd_register_systemlib(v);
+
+    // Load and execute file
+    sq_setcompilererrorhandler(v, SquirrelOnCompileError);
+    if (SQ_SUCCEEDED(CompileFile(v, fileName.c_str()))) {
+      sq_pushroottable(v);
+
+      if (SQ_FAILED(sq_call(v, 1 /* root table */, SQFalse, SQTrue))) {
+        cerr << "Failed to call global method" << endl;
+      }
+      sq_pop(v, 1);// Pop function
+    }
+
+    // All done
+    sq_close(v);
+
+    {
+      std::lock_guard<std::mutex> lock(vmsMutex_);
+      const auto pos =
+              std::find_if(runningVms_.begin(), runningVms_.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
+      const auto lastPos = runningVms_.end() - 1;
+      std::swap(*pos, *lastPos);
+      runningVms_.pop_back();
+    }
   }
 
-  // All done
-  sq_close(v);
-
+  void Teardown()
   {
-    std::lock_guard<std::mutex> lock(vmsMutex);
-    const auto pos = std::find_if(vms.begin(), vms.end(), [v](const auto& vmInfo) { return vmInfo.v == v; });
-    const auto lastPos = vms.end() - 1;
-    std::swap(*pos, *lastPos);
-    vms.pop_back();
+    const SampleApp& instance = Instance();
+
+    if (ep_ != nullptr) {
+      ep_->Stop(true);
+      ep_.reset();
+    }
+
+    EmbeddedServer::ShutdownEnvironment();
+  }
+
+  void HandleOutputLine(const std::string_view str, const bool isErr) const
+  {
+    const sdb::data::OutputLine outputLine{str, isErr};
+    ep_->GetEventInterface()->HandleOutputLine(outputLine);
+  }
+
+  SquirrelDebugger* DebuggerForVm(SQVM* const vm) const
+  {
+    const auto iter =
+            std::find_if(runningVms_.begin(), runningVms_.end(), [vm](const auto& vmInfo) { return vmInfo.v == vm; });
+    return iter != runningVms_.end() ? iter->debugger.get() : nullptr;
+  }
+
+ private:
+  SampleApp() = default;
+
+  std::unique_ptr<EmbeddedServer> ep_;
+  std::shared_ptr<SquirrelDebugger> debugger_;
+
+  struct VmInfo {
+    HSQUIRRELVM v;
+    std::shared_ptr<SquirrelDebugger> debugger;
+  };
+  std::vector<VmInfo> runningVms_;
+  std::mutex vmsMutex_;
+};
+
+void SquirrelPrintCallback(HSQUIRRELVM vm, const SQChar* text, ...)
+{
+  std::array<char, 1024> buffer;
+
+  va_list vl;
+  va_start(vl, text);
+  const auto size = vsprintf_s(buffer.data(), 1024, text, vl);
+  va_end(vl);
+
+  if (size > 0) {
+    const std::string_view str = {&buffer[0], static_cast<std::string_view::size_type>(size)};
+    cout << str.data() << endl;
+
+    SampleApp::Instance().HandleOutputLine(str, false);
+  }
+}
+
+void SquirrelPrintErrCallback(HSQUIRRELVM vm, const SQChar* text, ...)
+{
+  std::array<char, 1024> buffer;
+
+  va_list vl;
+  va_start(vl, text);
+  const auto size = vsprintf_s(buffer.data(), 1024, text, vl);
+  va_end(vl);
+
+  if (size > 0) {
+    const std::string_view str = {&buffer[0], static_cast<std::string_view::size_type>(size)};
+    cout << str.data() << endl;
+
+    SampleApp::Instance().HandleOutputLine(str, true);
+  }
+}
+
+void SquirrelNativeDebugHook(
+        SQVM* const v, const SQInteger type, const SQChar* sourceName, const SQInteger line,
+        const SQChar* const funcName)
+{
+  SquirrelDebugger* debugger = SampleApp::Instance().DebuggerForVm(v);
+  if (debugger != nullptr) {
+    debugger->SquirrelNativeDebugHook(v, type, sourceName, line, funcName);
   }
 }
 
 namespace sdb::log {
-const std::array<plog::Severity, 5> kLevelToSeverity = {plog::verbose, plog::debug, plog::info, plog::warning, plog::error};
+const std::array<plog::Severity, 5> kLevelToSeverity = {
+        plog::verbose, plog::debug, plog::info, plog::warning, plog::error};
 void LogFormatted(const char* tag, const size_t line, const Level level, const char* message, ...)
 {
   const auto severity = kLevelToSeverity.at(static_cast<std::size_t>(level));
@@ -203,7 +276,8 @@ void LogString(const char* tag, const size_t line, const Level level, const char
 }
 }// namespace sdb::log
 
-template<typename T> void WrapWithTries(bool& ioShouldContinue, T& oStream, const char* failMessageDetail, const std::function<void()>& fn)
+template<typename T>
+void WrapWithTries(bool& ioShouldContinue, T& oStream, const char* failMessageDetail, const std::function<void()>& fn)
 {
   if (!ioShouldContinue) {
     return;
@@ -229,42 +303,21 @@ template<typename T> void WrapWithTries(bool& ioShouldContinue, T& oStream, cons
   }
 }
 
-int main(int argc, char* argv[])
+int main(int /*argc*/, char** /*argv*/)
 {
-  std::unique_ptr<EmbeddedServer> ep;
-  std::shared_ptr<SquirrelDebugger> debugger;
-
   bool shouldContinue = true;
 
   WrapWithTries(shouldContinue, cerr, "Initializing Logger", [&]() {
     // plog requires that appenders are static, thus destroyed at exit time.
-    static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;  // NOLINT(clang-diagnostic-exit-time-destructors)
+    static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;// NOLINT(clang-diagnostic-exit-time-destructors)
     plog::init(plog::verbose, &consoleAppender);
   });
 
-  WrapWithTries(shouldContinue, cerr, "Initializing Environment", [&]() {
-    EmbeddedServer::InitEnvironment();
-    ep.reset(EmbeddedServer::Create());
+  WrapWithTries(shouldContinue, cerr, "Initializing Environment", [&]() { SampleApp::Instance().Initialize(); });
 
-    debugger = std::make_shared<SquirrelDebugger>();
-    ep->SetCommandInterface(debugger);
-    debugger->SetEventInterface(ep->GetEventInterface());
+  WrapWithTries(shouldContinue, cerr, "Running", [&]() { SampleApp::Instance().Run(); });
 
-    ep->Start();
-  });
-
-  WrapWithTries(shouldContinue, cerr, "Running", [&]() {
-    Run(debugger);
-  });
-
-  WrapWithTries(shouldContinue, cerr, "Teardown", [&]() {
-    if (ep != nullptr) {
-      ep->Stop(true);
-      ep.reset();
-    }
-
-    EmbeddedServer::ShutdownEnvironment();
-  });
+  WrapWithTries(shouldContinue, cerr, "Teardown", [&]() { SampleApp::Instance().Teardown(); });
 
   return shouldContinue ? 0 : 1;
 }

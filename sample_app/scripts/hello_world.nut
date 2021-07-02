@@ -1,3 +1,7 @@
+// Test out printing
+::print("This is a print")
+::error("This is an error")
+
 class BaseVector {
     constructor(...)
     {
@@ -25,7 +29,7 @@ local class Vector3 extends BaseVector {
     }
     function Print()
     {
-        ::print($"{x}, {y}, {z}\n")
+        ::print($"{x}, {y}, {z}")
     }
 }
 

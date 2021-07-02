@@ -334,7 +334,7 @@ ReturnCode SquirrelDebugger::SendStatus()
     }
   }
 
-  eventInterface_->HandleStatusChanged(std::move(status));
+  eventInterface_->HandleStatusChanged(status);
   return ReturnCode::Success;
 }
 
@@ -401,11 +401,8 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
       status.pausedAtBreakpointId = bp.id;
 
       vmData_->PopulateStack(status.stack);
-
-      {
-        Status statusCopy = status;
-        eventInterface_->HandleStatusChanged(std::move(statusCopy));
-      }
+      
+      eventInterface_->HandleStatusChanged(status);
 
       // This Cv will be signaled whenever the value of pauseRequested_ changes.
       pauseCv_.wait(lock);

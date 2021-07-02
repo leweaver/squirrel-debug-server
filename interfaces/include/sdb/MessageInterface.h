@@ -35,6 +35,12 @@ struct Status {
   std::vector<StackEntry> stack;
   uint64_t pausedAtBreakpointId = 0;
 };
+
+struct OutputLine
+{
+  std::string_view output;
+  bool isErr = false;
+};
 enum class VariableType {
   Null,
   Integer,
@@ -160,7 +166,8 @@ class MessageEventInterface {
   MessageEventInterface& operator=(MessageEventInterface&&) = delete;
 
   // Interface definition
-  virtual void HandleStatusChanged(data::Status&& status) = 0;
+  virtual void HandleStatusChanged(const data::Status& status) = 0;
+  virtual void HandleOutputLine(const data::OutputLine& outputLine) = 0;
 };
 }// namespace sdb
 

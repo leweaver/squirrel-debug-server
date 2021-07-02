@@ -107,17 +107,8 @@ export class SquidDebugSession extends DebugSession {
             logger.log("BP Changed: " + bp.id + " -> " + bp.verified);
             this.sendEvent(new BreakpointEvent('changed', { verified: bp.verified, id: bp.id } as DebugProtocol.Breakpoint));
         });
-        this._runtime.on('output', (text, filePath, line, column) => {
-            const e: DebugProtocol.OutputEvent = new OutputEvent(`${text}\n`);
-
-            if (text === 'start' || text === 'startCollapsed' || text === 'end') {
-                e.body.group = text;
-                e.body.output = `group-${text}\n`;
-            }
-
-            e.body.source = this.createSource(filePath);
-            e.body.line = this.convertDebuggerLineToClient(line);
-            e.body.column = this.convertDebuggerColumnToClient(column);
+        this._runtime.on('output', (text, category) => {
+            const e: DebugProtocol.OutputEvent = new OutputEvent(`${text}`, category);
             this.sendEvent(e);
         });
         this._runtime.on('end', () => {

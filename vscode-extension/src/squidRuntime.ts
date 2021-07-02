@@ -4,7 +4,7 @@
 
 import { logger} from 'vscode-debugadapter';
 import { EventEmitter } from 'events';
-import { EventMessage, EventMessageType, Status, Runstate, Variable, ResolvedBreakpoint } from './squidDto';
+import { EventMessage, EventMessageType, Status, OutputLine, Runstate, Variable, ResolvedBreakpoint } from './squidDto';
 
 import encodeUrl = require('encodeurl');
 import got = require('got');
@@ -293,6 +293,9 @@ export class SquidRuntime extends EventEmitter {
                 case EventMessageType.status:
                     this.updateStatus(new Status(message.message));
                     break;
+                case EventMessageType.output_line:
+                    this.outputLine(new OutputLine(message.message));
+                    break;
                 default:
                     logger.log("Unabled to handle message: " + message.type);
                     return Promise.reject();
@@ -339,6 +342,10 @@ export class SquidRuntime extends EventEmitter {
             logger.log('Playing');
             this.sendEvent('continued');
         }
+    }
+
+    private outputLine(outputLine: OutputLine) {
+        this.sendEvent('output', outputLine.output, outputLine.isErr ? 'stderr' : 'console');
     }
 
     public async loadSource(file: string): Promise<string[]> {
