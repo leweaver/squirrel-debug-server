@@ -1,5 +1,6 @@
 // Test out printing
 ::print("This is a print")
+::print(" on the same line\n")
 ::error("This is an error")
 
 class BaseVector {
@@ -29,7 +30,7 @@ local class Vector3 extends BaseVector {
     }
     function Print()
     {
-        ::print($"{x}, {y}, {z}")
+        ::print($"{x}, {y}, {z}\n")
     }
 }
 
@@ -44,7 +45,7 @@ v2.Print()
 
 FakeNamespace.Utils.SuperClass <- class  {
     constructor(a, b, c, d, e, f) {
-        ::print("FakeNamespace.Utils.SuperClass" + a)
+        ::print("FakeNamespace.Utils.SuperClass (a=" + a + ")\n")
     }
 }
 

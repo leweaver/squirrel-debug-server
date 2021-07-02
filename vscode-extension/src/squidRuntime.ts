@@ -10,6 +10,11 @@ import encodeUrl = require('encodeurl');
 import got = require('got');
 import WebSocket = require('ws');
 
+import cp = require("child_process");
+import terminate = require("terminate");
+
+import { window } from "vscode";
+
 export interface FileAccessor {
     readFile(path: string): Promise<string>;
 }
@@ -70,6 +75,8 @@ export class SquidRuntime extends EventEmitter {
     //private _otherExceptions = false;
 
     private _debuggerHostnamePort = "localhost:8000";
+    private _ws?: WebSocket = undefined;
+    private _pid: number = 0;
 
     private _status?: Status = undefined;
 
@@ -82,7 +89,28 @@ export class SquidRuntime extends EventEmitter {
     /**
      * Start executing the given program.
      */
-    public async start(hostnamePort: string, stopOnEntry: boolean, noDebug: boolean): Promise<void> {
+    public async start(hostnamePort: string, program: string, noDebug: boolean): Promise<void> {
+
+        logger.log('in start hostnamePort=' + hostnamePort + ", program=" + program);
+        // TODO: enable noDebug on server side?
+        if (program) {
+			let executableLine = `${program}`;
+            // todo: add breakpoints on command line? how do we stop runaway?
+            const exec = cp.exec(executableLine);
+            exec.on('error', (error) => {
+				window.showErrorMessage(`Failed to launch instance: ${error}`);
+                this.emit('end');
+			});
+
+            const pid = exec.pid;
+            this._pid = pid;
+            logger.log('launched with PID ' + exec.pid);
+
+            exec.on("exit", (code) => {
+                logger.log(`process ${pid} exited with code ${code}`);
+                this.emit('end');
+            });
+        }
 
         this._debuggerHostnamePort = hostnamePort;
         const self = this;
@@ -103,6 +131,17 @@ export class SquidRuntime extends EventEmitter {
                 logger.error(e);
                 this.emit('end');
             });
+    }
+
+    public async stop(): Promise<void> {
+        if (this._pid) {
+            terminate.default(this._pid);
+            this._pid = 0;
+        }
+        if (this._ws) {
+            this._ws?.close();
+            this._ws = undefined;
+        }
     }
 
     /**
@@ -251,11 +290,25 @@ export class SquidRuntime extends EventEmitter {
 
     // private methods
 
-    private async connectDebugger(hostnamePort: string): Promise<void> {        
-        logger.log('in connectDebugger');
+    private async connectDebugger(hostnamePort: string): Promise<void> {  
+        logger.log('in connectDebugger');      
+        if (typeof(hostnamePort) === undefined) {
+            throw new Error("hostname and port must be provided.");
+        }
+        
         let self = this;
+
+        // Try to reach the debugger by GET request first
+        await got(`http://${hostnamePort}/`, {
+                retry: {
+                    retries: 5
+                }
+            });
+
+        // GET request to index was successful, so debug server has started. Now try to establish websocket.
         return new Promise<void>((resolve, reject) => {
             let ws = new WebSocket(`ws://${hostnamePort}/ws`);
+            self._ws = ws;
             ws.on('open', function open() {
                 logger.log('open');
                 self._connected = true;

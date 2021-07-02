@@ -7,9 +7,15 @@
         {
             "type": "squirrel",
             "request": "launch",
+            "name": "Run current file",
+            "hostnamePort": "localhost:8000",
+            "program": "\"${command:SquidRuntime}\" -p 8000 -s -f \"${file}\""
+        },
+        {
+            "type": "squirrel",
+            "request": "launch",
             "name": "Ask for hostname and port",
-            "hostnamePort": "${command:AskForHostnamePort}",
-            "stopOnEntry": true
+            "hostnamePort": "${command:AskForHostnamePort}"
         }
     ]
 }

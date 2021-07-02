@@ -28,8 +28,8 @@ function timeout(ms: number) {
 interface ILaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
     /** network host and port that we connect to */
     hostnamePort: string;
-    /** Automatically stop target after launch. If not specified, target does not stop. */
-    stopOnEntry?: boolean;
+    /** application to launch */
+    program: string;
     /** enable logging the Debug Adapter Protocol */
     trace?: boolean;
     /** run without debugging */
@@ -211,7 +211,7 @@ export class SquidDebugSession extends DebugSession {
         await this._configurationDone.wait(1000);
 
         // make the connection in the runtime
-        await this._runtime.start(args.hostnamePort, !!args.stopOnEntry, !!args.noDebug);
+        await this._runtime.start(args.hostnamePort, args.program, args.noDebug ?? false);
 
         this.sendResponse(response);
     }
@@ -440,7 +440,10 @@ export class SquidDebugSession extends DebugSession {
     protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments): void {
         this._runtime.stepOut().then(() => this.sendResponse(response));
     }
-
+    
+    protected terminateRequest(response: DebugProtocol.TerminateResponse, args: DebugProtocol.TerminateArguments, request?: DebugProtocol.Request): void {
+        this._runtime.stop().then(() => this.sendResponse(response));
+    }
     protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments): Promise<void> {
 
         let reply: string | undefined = undefined;

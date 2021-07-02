@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { WorkspaceFolder, DebugConfiguration, ProviderResult } from 'vscode';
 import { SquidDebugSession } from './squidDebug';
 import { FileAccessor } from './squidRuntime';
+import { getConfiguration } from './utils';
 
 export function activateSquidDebug(context: vscode.ExtensionContext, factory?: vscode.DebugAdapterDescriptorFactory) {
     context.subscriptions.push(
@@ -21,7 +22,8 @@ export function activateSquidDebug(context: vscode.ExtensionContext, factory?: v
                         type: 'squirrel',
                         name: 'Run File',
                         request: 'launch',
-                        program: targetResource.fsPath
+                        hostnamePort: "localhost:8000",
+                        program: `"${getConfiguration('runtime_path')}" -p 8000 -s -f "${targetResource.fsPath}"`
                     },
                     { noDebug: true }
                 );
@@ -37,7 +39,8 @@ export function activateSquidDebug(context: vscode.ExtensionContext, factory?: v
                     type: 'squirrel',
                     name: 'Debug File',
                     request: 'launch',
-                    program: targetResource.fsPath
+                    hostnamePort: "localhost:8000",
+                    program: `"${getConfiguration('runtime_path')}" -p 8000 -s -f "${targetResource.fsPath}"`
                 });
             }
         }),
@@ -56,6 +59,10 @@ export function activateSquidDebug(context: vscode.ExtensionContext, factory?: v
         });
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('extension.squirrel-debug.getSquidRuntime', config => {
+        return getConfiguration('runtime_path');
+    }));
+
     // register a configuration provider for current open 'squirrel' file debug type
     //const provider = new SquidConfigurationProvider();
     //context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('squirrel', provider));
@@ -68,7 +75,8 @@ export function activateSquidDebug(context: vscode.ExtensionContext, factory?: v
                     name: "Dynamic Launch",
                     request: "launch",
                     type: "squirrel",
-                    program: "${file}"
+                    hostnamePort: "localhost:8000",
+                    program: '"${command:SquidRuntime}" -p 8000 -s -f ${file}"'
                 }
             ];
         }
@@ -139,7 +147,6 @@ export function activateSquidDebug(context: vscode.ExtensionContext, factory?: v
 // 				config.name = 'Launch';
 // 				config.request = 'launch';
 // 				config.program = '${file}';
-// 				config.stopOnEntry = true;
 // 			}
 // 		}
 

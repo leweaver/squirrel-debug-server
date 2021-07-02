@@ -47,7 +47,8 @@
     "encodeurl": "^1.0.1",
     "got": "^9.6.0",
     "vscode-debugadapter": "^1.47.0",
-    "ws": "^7.4.6"
+    "ws": "^7.4.6",
+		"terminate": "^2.1.2"
   },
   "devDependencies": {
     "@types/encodeurl": "^1.0.0",
@@ -83,6 +84,26 @@
   },
   "contributes": {
     "menus": {
+      "editor/title/run": [
+        {
+          "command": "extension.squirrel-debug.runEditorContents",
+          "when": "resourceLangId == squirrel"
+        },
+        {
+          "command": "extension.squirrel-debug.debugEditorContents",
+          "when": "resourceLangId == squirrel"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "extension.squirrel-debug.debugEditorContents",
+          "when": "resourceLangId == squirrel"
+        },
+        {
+          "command": "extension.squirrel-debug.runEditorContents",
+          "when": "resourceLangId == squirrel"
+        }
+      ],
       "debug/variables/context": [
         {
           "command": "extension.squirrel-debug.toggleFormatting",
@@ -91,6 +112,20 @@
       ]
     },
     "commands": [
+      {
+        "command": "extension.squirrel-debug.debugEditorContents",
+        "title": "Debug File",
+        "category": "Squid Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "extension.squirrel-debug.runEditorContents",
+        "title": "Run File",
+        "category": "Squid Debug",
+        "enablement": "!inDebugMode",
+        "icon": "$(play)"
+      },
       {
         "command": "extension.squirrel-debug.toggleFormatting",
         "title": "Toggle between decimal and hex formatting"
@@ -101,6 +136,17 @@
         "language": "squirrel"
       }
     ],
+    "configuration": {
+			"type": "object",
+			"title": "Squid (Squirrel Debugger) Tools configuration",
+			"properties": {
+				"squid_tools.runtime_path": {
+					"type": "string",
+					"default": "my_squrriel_app.exe",
+					"description": "The absolute path to the default squirrel executable that contains the Squid Debug Server."
+				}
+			}
+		},
     "debuggers": [
       {
         "type": "squirrel",
@@ -112,19 +158,17 @@
         "runtime": "node",
         "configurationAttributes": {
           "launch": {
-            "required": [
-              "hostnamePort"
-            ],
+            "required": ["hostnamePort"],
             "properties": {
               "hostnamePort": {
                 "type": "string",
                 "description": "hostname:port of the host application",
                 "default": "${command:AskForHostnamePort}"
               },
-              "stopOnEntry": {
-                "type": "boolean",
-                "description": "Automatically stop after launch.",
-                "default": true
+              "program": {
+                "type": "string",
+                "description": "Launch application with given arguments.",
+                "default": ""
               },
               "trace": {
                 "type": "boolean",
@@ -139,25 +183,42 @@
             "type": "squirrel",
             "request": "launch",
             "name": "Ask for hostname and port",
-            "hostnamePort": "${command:AskForHostnamePort}",
-            "stopOnEntry": true
+            "hostnamePort": "${command:AskForHostnamePort}"
+          },
+          {
+            "type": "squirrel",
+            "request": "launch",
+            "name": "Run current file",
+            "hostnamePort": "localhost:8000",
+            "program": "${command:SquidRuntime} -p 8000 -f \"${file}\""
           }
         ],
         "configurationSnippets": [
           {
-            "label": "Squirrel Remote Debug",
-            "description": "A new configuration for connection the debugger to a process running Squid",
+            "label": "Squirrel Debug Connect",
+            "description": "A new configuration for connection the debugger to an existing process running Squid",
             "body": {
               "type": "squirrel",
               "request": "launch",
               "name": "Ask for hostname and port",
-              "hostnamePort": "^\"\\${command:AskForProgramName}\"",
-              "stopOnEntry": true
+              "hostnamePort": "^\"\\${command:AskForHostnamePort}\""
+            }
+          },
+          {
+            "label": "Squirrel Debug Current File",
+            "description": "A new configuration for connection the debugger to an existing process running Squid",
+            "body": {
+              "type": "squirrel",
+              "request": "launch",
+              "name": "Run current file",
+              "hostnamePort": "localhost:8000",
+              "program": "^\"\\\"\\${command:SquidRuntime}\\\" -p 8000 -s -f \\\"\\${file}\\\"\""
             }
           }
         ],
         "variables": {
-          "AskForHostnamePort": "extension.squirrel-debug.getHostnamePort"
+          "AskForHostnamePort": "extension.squirrel-debug.getHostnamePort",
+          "SquidRuntime": "extension.squirrel-debug.getSquidRuntime"
         }
       }
     ]
