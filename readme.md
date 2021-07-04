@@ -1,5 +1,7 @@
 # [S]quirrel Debugger
 
+![CMake Build](https://github.com/leweaver/squirrel-debug-server/actions/workflows/cmake.yml/badge.svg)
+
 ## Release Notes - v0.1
 First versioned release, 'MVP'
 
