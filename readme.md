@@ -1,53 +1,12 @@
-# [S]quirrel Debugger
+# Squirrel (and Quirrel) Debugger
 
 ![CMake Build](https://github.com/leweaver/squirrel-debug-server/actions/workflows/cmake.yml/badge.svg)
 
-## Release Notes - v0.1
-First versioned release, 'MVP'
+This project contains libraries that will give your application the ability to remote debug a Squirrel (or Quirrel) VM. It does so using the standard Squirrel Debug Hooks, but provides a threadsafe & easy to use interface to set breakpoints, query the current state of the stack or local/global variables, redirect output, etc. 
 
-[x] Websocket listener for server state changes
-[x] HTTP Command interface
-[x] Stack-Local variables
-[x] Global Variables
-[x] Simple Breakpoints
-[x] Output redirection & capture
-[x] Coding standards and formatting
-[x] Better debug logging
-[x] Run sample exe with arguments
-[ ] Hover-evaluation
-[ ] Copyright headers
+Also included (but optional) is an HTTP server that provides remote-debug capability. This is via an HTTP REST API, and output redirection/status notifications can be subscribed to via websockets. The REST API started by the embedded server is designed to be used by the companion [Visual Studio Code extension](https://github.com/leweaver/squirrel-debug-vscode), but you can also call them manually via something like POSTman, or the Swagger UI that is started by the embedded server on the provided port (e.g. http://localhost:8000/swagger/ui).
 
-## Not Supported
-[ ] Multiple VM's (threads)
-[ ] Improved output of variables in inspector
-[ ] Conditional breakpoints
-[ ] Modification of variable values (int and string only?)
-[ ] Immediate window for execution
-[ ] MacOS / Linux support
-[ ] squirrel unicode builds
-
-Setup:
-
-1. download and install any toolchain dependencies (see following toolchains section)
-1. restart your IDE if it was already open
-1. open the top-level CMakeLists.txt in either CLion or Visual Studio
-1. Set up the toolchain
-
-# Building Sample from source using CMake
-Currently, only support building on windows using CMake. This requires that you have Visual Studio 2019 installed.
-
-To build:
-open a "Developer Command Prompt for VS 2019" (via start menu) and change to the repository directory.
-
-```
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --target "sample_app"
-```
-
-`sample_app.exe` will now exist in the `build/
-
-# Embedding the debugger in your application
-The repository contains a few CMake targets:
+## Components:
 
 - *interfaces* Contains 2 pure-virtual interfaces that are implemented by the following 2 projects.
     - `MessageEventInterface`, allowing the Debugger to send messages to the debug user interface.
@@ -61,6 +20,40 @@ The repository contains a few CMake targets:
 - *sample_app* 
     - Shows an example of how to embed the debugger in an application that runs a Quirrel script.
 
+## Release Notes - v0.1
+First versioned release, 'MVP'
+
+[x] Websocket listener for server state changes
+[x] HTTP Command interface
+[x] Stack-Local variables
+[x] Global Variables
+[x] Simple Breakpoints
+[x] Output redirection & capture
+
+## Not Currently Supported
+[ ] Multiple VM's (threads)
+[ ] Improved output of variables in inspector
+[ ] Conditional breakpoints
+[ ] Modification of variable values (int and string only?)
+[ ] Immediate window for execution
+[ ] MacOS / Linux support
+[ ] squirrel unicode builds
+[ ] Disablement of the swagger UI on startup
+
+# Building Sample from source using CMake
+Currently, only support building on windows using CMake. This requires that you have Visual Studio 2019 installed.
+
+To build:
+open a "Developer Command Prompt for VS 2019" (via start menu) and change to the repository directory.
+
+```
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target "sample_app"
+```
+
+`sample_app.exe` will now exist in the `build/`
+
+# Embedding the debugger in your application
 To use the debugger in your application, you will need to take a static library dependency on the `sdb::embedded_server` and `sdb::squirrel_debugger` targets. The easiest way to do this is with CMake FetchContent. In your `CMakeLists.txt`:
 
 ```Cmake
