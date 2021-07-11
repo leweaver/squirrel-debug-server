@@ -12,6 +12,20 @@
       "ctestCommandArgs": "",
       "enableClangTidyCodeAnalysis": true,
       "clangTidyChecks": "readability-*,cppcoreguidelines-*,hicpp-*"
+    },
+    {
+      "name": "x64-Release (default)",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "enableClangTidyCodeAnalysis": true,
+      "clangTidyChecks": "readability-*,cppcoreguidelines-*,hicpp-*",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": []
     }
   ]
 }
