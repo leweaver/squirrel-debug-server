@@ -66,7 +66,8 @@ enum class VariableType {
 enum class VariableScope
 {
   Local,
-  Global
+  Global,
+  Evaluation
 };
 
 struct Variable {
@@ -99,6 +100,7 @@ struct ImmediateValue
 {
   Variable variable;
   VariableScope scope;
+  std::vector<uint32_t> iteratorPath;
 };
 }// namespace data
 
@@ -156,8 +158,11 @@ class MessageCommandInterface {
   [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(
           const std::string& path, const data::PaginationInfo& pagination, std::vector<data::Variable>& variables) = 0;
 
+  /// <summary>
+  /// Evaluate the expression in the scope of this stack frame. If -1, the expression is evaluated in the global scope.
+  /// </summary>
   [[nodiscard]] virtual data::ReturnCode GetImmediateValue(
-          uint32_t stackFrame, const std::string& watch, const data::PaginationInfo& pagination,
+          int32_t stackFrame, const std::string& watch, const data::PaginationInfo& pagination,
           data::ImmediateValue& variable) = 0;
 
   [[nodiscard]] virtual data::ReturnCode SetFileBreakpoints(

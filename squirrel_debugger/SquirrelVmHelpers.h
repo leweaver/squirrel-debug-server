@@ -34,9 +34,9 @@ data::ReturnCode CreateChildVariable(HSQUIRRELVM v, data::Variable& variable);
 data::ReturnCode CreateChildVariablesFromIterable(
         HSQUIRRELVM v, std::vector<uint64_t>::const_iterator pathBegin, std::vector<uint64_t>::const_iterator pathEnd,
         const data::PaginationInfo& pagination, std::vector<data::Variable>& variables);
-data::ReturnCode CreateChildVariablesFromExpression(
+data::ReturnCode CreateChildVariableFromExpression(
         SQVM* v, const ExpressionNode* expressionNode, const data::PaginationInfo& pagination,
-        std::vector<data::Variable>& variables);
+        data::Variable& variable, std::vector<uint32_t>& iteratorPath);
 
 class ScopedVerifySqTop {
  public:
