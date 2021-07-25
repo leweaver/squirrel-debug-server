@@ -50,6 +50,10 @@ ENUM(VariableType, v_int32,
     VALUE(Instance,     15, "instance"),
     VALUE(WeakRef,      16, "weakref"),
     VALUE(Outer,        17, "outer"))
+
+ENUM(VariableScope, v_int32,
+    VALUE(Local,      0, "local"),
+    VALUE(Global,     1, "global"))
 // clang-format on
 
 template<typename TMessageBody>
@@ -90,6 +94,19 @@ class VariableList : public CommandMessageResponse {
   DTO_INIT(VariableList, CommandMessageResponse)
 
   DTO_FIELD(List<Object<Variable>>, variables);
+};
+
+class ImmediateValue : public oatpp::DTO {
+  DTO_INIT(ImmediateValue, DTO)
+
+  DTO_FIELD(Object<Variable>, variable);
+  DTO_FIELD(Enum<VariableScope>, variableScope);
+};
+
+class ImmediateValueList : public CommandMessageResponse {
+  DTO_INIT(ImmediateValueList, CommandMessageResponse)
+
+  DTO_FIELD(List<Object<ImmediateValue>>, values);
 };
 
 class StackEntry : public oatpp::DTO {

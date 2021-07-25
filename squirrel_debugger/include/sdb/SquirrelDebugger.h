@@ -54,11 +54,15 @@ class SquirrelDebugger final : public MessageCommandInterface {
           const std::string& file, const std::vector<data::CreateBreakpoint>& createBps,
           std::vector<data::ResolvedBreakpoint>& resolvedBps) override;
 
+  [[nodiscard]] data::ReturnCode GetImmediateValue(
+          uint32_t stackFrame, const std::string& watch, const data::PaginationInfo& pagination,
+          data::ImmediateValue& variable) override;
+
   // The following methods should be called from the scripting engine (VM) thread in response to Squirrel Debug Hooks.
   void SquirrelNativeDebugHook(
           HSQUIRRELVM v, SQInteger type, const SQChar* sourceName, SQInteger line, const SQChar* functionName);
   void SquirrelPrintCallback(HSQUIRRELVM vm, bool isErr, std::string_view str) const;
-  
+
   // Configuration
   static SQInteger DefaultStackSize();
 

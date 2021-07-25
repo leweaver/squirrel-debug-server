@@ -130,6 +130,59 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     AddCommandMessageErrorResponses(info);
   }
 
+  ENDPOINT(
+          "PUT", "Variables/Immediate/{stackFrame}", StackImmediate, PATH(UInt32, stackFrame),
+          QUERIES(QueryParams, queryParams), BODY_DTO(List<String>, immediateStrings))
+  {
+    auto getVariablesFn = [&](const data::PaginationInfo& pagination) {
+      const List<String>& isList = immediateStrings;
+      std::vector<data::ImmediateValue> variables;
+      data::ReturnCode ret = data::ReturnCode::Success;
+      for (auto i = 0U; i < isList->size(); ++i) {
+        const auto& immediateString = isList[i];
+        data::ImmediateValue iv;
+        ret = messageCommandInterface_->GetImmediateValue(stackFrame, immediateString->std_str(), pagination, iv);
+        if (ret != data::ReturnCode::Success) {
+          break;
+        }
+        variables.push_back(iv);
+      }
+      return std::tuple(ret, variables);
+    };
+
+    data::PaginationInfo pagination = {};
+    const bool validParams = ParseQueryParamWithDefault(queryParams, "beginIterator", 0U, pagination.beginIterator) &&
+                             ParseQueryParamWithDefault(queryParams, "count", 100U, pagination.count) &&
+                             pagination.count <= 1000U;
+    if (!validParams) {
+      return CreateReturnCodeResponse(data::ReturnCode::InvalidParameter);
+    }
+
+    const auto [ret, values] = getVariablesFn(pagination);
+    if (ret != data::ReturnCode::Success) {
+      return CreateReturnCodeResponse(ret);
+    }
+
+    const auto varListDto = dto::ImmediateValueList::createShared();
+    varListDto->values = List<Object<dto::ImmediateValue>>::createShared();
+    for (const auto& [variable, scope] : values)
+    {
+      auto valueDto = dto::ImmediateValue::createShared();
+      varListDto->values->push_back(valueDto);
+      valueDto->variable = CreateVariable(variable);
+      valueDto->variableScope = static_cast<dto::VariableScope>(scope);
+    }
+
+    varListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
+    return createDtoResponse(Status::CODE_200, varListDto);
+  }
+  ENDPOINT_INFO(StackImmediate)
+  {
+    info->addResponse<Object<dto::ImmediateValueList>>(Status::CODE_200, "application/json");
+    AddCommandMessagePaginationParams(info);
+    AddCommandMessageErrorResponses(info);
+  }
+
   ENDPOINT("PUT", "FileBreakpoints", FileBreakpoints, BODY_DTO(Object<dto::SetFileBreakpointsRequest>, createBpRequest))
   {
     std::vector<data::CreateBreakpoint> bpList;
@@ -226,21 +279,25 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   {
     auto variablesDto = List<Object<dto::Variable>>::createShared();
     for (const auto& variable : variables) {
-      auto variableDto = dto::Variable::createShared();
-      variableDto->pathIterator = variable.pathIterator;
-      variableDto->pathUiString =
-              String(variable.pathUiString.c_str(), static_cast<v_buff_size>(variable.pathUiString.size()), false);
-      variableDto->pathTableKeyType = static_cast<dto::VariableType>(variable.pathTableKeyType);
-      variableDto->valueType = static_cast<dto::VariableType>(variable.valueType);
-      variableDto->value = String(variable.value.c_str(), static_cast<v_buff_size>(variable.value.size()), false);
-      variableDto->valueRawAddress = variable.valueRawAddress;
-      variableDto->childCount = variable.childCount;
-      variableDto->instanceClassName = String(
-              variable.instanceClassName.c_str(), static_cast<v_buff_size>(variable.instanceClassName.size()), false);
-
-      variablesDto->emplace_back(std::move(variableDto));
+      variablesDto->push_back(CreateVariable(variable));
     }
     return variablesDto;
+  }
+
+  [[nodiscard]] static Object<dto::Variable> CreateVariable(const data::Variable& variable)
+  {
+    auto variableDto = dto::Variable::createShared();
+    variableDto->pathIterator = variable.pathIterator;
+    variableDto->pathUiString =
+            String(variable.pathUiString.c_str(), static_cast<v_buff_size>(variable.pathUiString.size()), false);
+    variableDto->pathTableKeyType = static_cast<dto::VariableType>(variable.pathTableKeyType);
+    variableDto->valueType = static_cast<dto::VariableType>(variable.valueType);
+    variableDto->value = String(variable.value.c_str(), static_cast<v_buff_size>(variable.value.size()), false);
+    variableDto->valueRawAddress = variable.valueRawAddress;
+    variableDto->childCount = variable.childCount;
+    variableDto->instanceClassName = String(
+            variable.instanceClassName.c_str(), static_cast<v_buff_size>(variable.instanceClassName.size()), false);
+    return variableDto;
   }
 
   [[nodiscard]] std::shared_ptr<OutgoingResponse> CreateCommandOkResponse() const

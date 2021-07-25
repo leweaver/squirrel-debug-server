@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdarg>
+#include <deque>
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
@@ -21,10 +22,15 @@ using sdb::data::RunState;
 using sdb::data::StackEntry;
 using sdb::data::Status;
 using sdb::data::Variable;
+using sdb::data::ImmediateValue;
 
 using sdb::sq::CreateChildVariable;
 using sdb::sq::CreateChildVariablesFromIterable;
+using sdb::sq::CreateChildVariablesFromExpression;
 using sdb::sq::ScopedVerifySqTop;
+using sdb::sq::WatchParseError;
+using sdb::sq::ExpressionNode;
+using sdb::sq::ExpressionNodeType;
 
 using LockGuard = std::lock_guard<std::recursive_mutex>;
 
@@ -257,6 +263,145 @@ ReturnCode SquirrelDebugger::GetGlobalVariables(
   }
 
   return vmData_->PopulateGlobalVariables(path, pagination, variables);
+}
+
+void PrintNode(ExpressionNode* node)
+{
+  while (node) {
+    if (node->accessorValue.empty()) {
+      SDB_LOGD(kLogTag, "[");
+      PrintNode(node->accessorExpression.get());
+      SDB_LOGD(kLogTag, "]");
+    }
+    else {
+      SDB_LOGD(kLogTag, "type: %d, value: %s", node->type, node->accessorValue.c_str());
+    }
+    node = node->next.get();
+  }
+}
+
+ReturnCode SquirrelDebugger::GetImmediateValue(
+        const uint32_t stackFrame, const std::string& watch, const PaginationInfo& pagination,
+        ImmediateValue& foundVariable)
+{
+  SDB_LOGD(kLogTag, "GetImmediateValue stackFrame=%" PRIu32 " watch=%s", stackFrame, watch.c_str());
+
+  // We run our own mini-lexer here as we don't want to allow full SQ execution. Just want to find a variable to inspect.
+
+  // Parse the watch string before locking
+
+  std::unique_ptr<ExpressionNode> expressionRoot;
+  try {
+    auto pos = watch.begin();
+    expressionRoot = sq::ParseExpression(pos, watch.end());
+    if (pos != watch.end()) {
+      throw WatchParseError("Invalid content after the end of the parsed expression", pos);
+    }
+  }
+  catch (const WatchParseError& err) {
+    const auto offset = err.pos - watch.begin();
+    auto underArrow = std::string(offset, ' ') + "^";
+    SDB_LOGD(
+            kLogTag, "Failed to parse expression at offset %" PRIu64 " (%s):\n%s\n%s", offset, err.what(),
+            watch.c_str(), underArrow.c_str());
+    return ReturnCode::InvalidParameter;
+  }
+
+  SDB_LOGD(kLogTag, "Parsed OK, much wow!");
+  PrintNode(expressionRoot.get());
+
+  std::lock_guard lock(pauseMutex_);
+  if (!pauseMutexData_->isPaused) {
+    SDB_LOGD(kLogTag, "cannot read watch value, not paused.");
+    return ReturnCode::InvalidNotPaused;
+  }
+
+  // Evaluate all sub-expressions
+  std::deque<ExpressionNode*> stack;
+  stack.push_back(expressionRoot.get());
+
+  const auto vm = vmData_->vm;
+  while (!stack.empty()) {
+    ExpressionNode* node = stack.back();
+    if (node->accessorExpression != nullptr)
+    {
+      stack.push_back(node->accessorExpression.get());
+    }
+    else {
+
+      stack.pop_back();
+
+      // evaluate this expression - which has NO sub expressions.
+      std::vector<Variable> variables;
+
+      {
+        ScopedVerifySqTop scopedVerify(vm);
+        // Is there a local by this name?
+        sq_newtable(vm);
+        for (SQUnsignedInteger nSeq = 0;; ++nSeq) {
+          // Push local with given index to stack
+          const auto* const localName = sq_getlocal(vm, stackFrame, nSeq);
+          if (localName == nullptr) {
+            break;
+          }
+          if (localName == node->accessorValue) {
+            sq_pushstring(vm, localName, node->accessorValue.size());
+            sq_push(vm, -2);
+            sq_rawset(vm, -4);
+            sq_poptop(vm);// pop local variable now so that the table is passed in to the expression
+            const auto rc = CreateChildVariablesFromExpression(vm, node->next.get(), pagination, variables);
+            if (rc != ReturnCode::Success) {
+              SDB_LOGD(kLogTag, "Failed to read local variable: %s", node->accessorValue.c_str());
+              return rc;
+            }
+            foundVariable.scope = data::VariableScope::Local;
+            break;
+          }
+
+          sq_poptop(vm);// pop local variable
+        }
+        sq_poptop(vm); // pop temp table
+
+        if (variables.empty()) {
+          sq_pushroottable(vm);
+          const auto rc = CreateChildVariablesFromExpression(vm, node, pagination, variables);
+          sq_poptop(vm);
+          if (rc != ReturnCode::Success) {
+            SDB_LOGD(kLogTag, "Failed to read variable from root table: %s", node->accessorValue.c_str());
+            return rc;
+          }
+          foundVariable.scope = data::VariableScope::Global;
+        }
+      }
+      
+      if (variables.size() != 1) {
+        SDB_LOGE(kLogTag, "Expected exacly 1 variable for last expressionNode %s", expressionRoot->accessorValue.c_str());
+        return ReturnCode::ErrorInternal;
+      }
+
+      if (stack.empty())
+      {
+        foundVariable.variable = variables.at(0);
+        return ReturnCode::Success;
+      }
+
+      const auto& variable = variables.at(0);
+      if (variable.valueType == data::VariableType::Integer) {
+        node->type = ExpressionNodeType::Number;
+      }
+      else if (variable.valueType == data::VariableType::String) {
+        node->type = ExpressionNodeType::String;
+      }
+      else {
+        SDB_LOGD(kLogTag, "Expression must resolve to a string or number.");
+        return ReturnCode::InvalidParameter;
+      }
+      node->accessorValue = variable.value;
+      node->accessorExpression.reset();
+    }
+  }
+
+  return ReturnCode::Success;
 }
 
 ReturnCode SquirrelDebugger::SetFileBreakpoints(

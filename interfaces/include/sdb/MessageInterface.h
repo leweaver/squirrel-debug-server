@@ -37,8 +37,7 @@ struct Status {
   uint64_t pausedAtBreakpointId = 0;
 };
 
-struct OutputLine
-{
+struct OutputLine {
   std::string_view const output;
   bool isErr = false;
   std::string_view const fileName;
@@ -63,6 +62,11 @@ enum class VariableType {
   Instance,
   WeakRef,
   Outer
+};
+enum class VariableScope
+{
+  Local,
+  Global
 };
 
 struct Variable {
@@ -91,6 +95,11 @@ struct ResolvedBreakpoint {
   uint32_t line;
   bool verified;
 };
+struct ImmediateValue
+{
+  Variable variable;
+  VariableScope scope;
+};
 }// namespace data
 
 /// <summary>
@@ -110,7 +119,7 @@ class MessageCommandInterface {
 
   // Interface definition
 
-  /// <summary> 
+  /// <summary>
   /// Instructs the program to pause execution at its current point
   /// </summary>
   [[nodiscard]] virtual data::ReturnCode PauseExecution() = 0;
@@ -140,17 +149,20 @@ class MessageCommandInterface {
   /// </summary>
   [[nodiscard]] virtual data::ReturnCode SendStatus() = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetStackVariables(uint32_t stackFrame, const std::string& path,
-                                                           const data::PaginationInfo& pagination,
-                                                           std::vector<data::Variable>& variables) = 0;
+  [[nodiscard]] virtual data::ReturnCode GetStackVariables(
+          uint32_t stackFrame, const std::string& path, const data::PaginationInfo& pagination,
+          std::vector<data::Variable>& variables) = 0;
 
-  [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(const std::string& path,
-                                                            const data::PaginationInfo& pagination,
-                                                            std::vector<data::Variable>& variables) = 0;
+  [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(
+          const std::string& path, const data::PaginationInfo& pagination, std::vector<data::Variable>& variables) = 0;
 
-  [[nodiscard]] virtual data::ReturnCode SetFileBreakpoints(const std::string& file,
-                                                            const std::vector<data::CreateBreakpoint>& createBps,
-                                                            std::vector<data::ResolvedBreakpoint>& resolvedBps) = 0;
+  [[nodiscard]] virtual data::ReturnCode GetImmediateValue(
+          uint32_t stackFrame, const std::string& watch, const data::PaginationInfo& pagination,
+          data::ImmediateValue& variable) = 0;
+
+  [[nodiscard]] virtual data::ReturnCode SetFileBreakpoints(
+          const std::string& file, const std::vector<data::CreateBreakpoint>& createBps,
+          std::vector<data::ResolvedBreakpoint>& resolvedBps) = 0;
 };
 
 /// <summary>

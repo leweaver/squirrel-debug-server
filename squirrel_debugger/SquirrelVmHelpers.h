@@ -10,10 +10,20 @@
 
 #include <cassert>
 #include <squirrel.h>
+#include <stdexcept>
 
 #include <string>
 
 namespace sdb::sq {
+enum class ExpressionNodeType { Undefined, String, Number, Identifier };
+
+struct ExpressionNode {
+  std::unique_ptr<ExpressionNode> next;
+  std::string accessorValue;
+  std::unique_ptr<ExpressionNode> accessorExpression;
+  ExpressionNodeType type = ExpressionNodeType::Undefined;
+};
+
 const char* ToSqObjectTypeName(SQObjectType sqType);
 data::VariableType ToVariableType(SQObjectType sqType);
 
@@ -24,6 +34,9 @@ data::ReturnCode CreateChildVariable(HSQUIRRELVM v, data::Variable& variable);
 data::ReturnCode CreateChildVariablesFromIterable(
         HSQUIRRELVM v, std::vector<uint64_t>::const_iterator pathBegin, std::vector<uint64_t>::const_iterator pathEnd,
         const data::PaginationInfo& pagination, std::vector<data::Variable>& variables);
+data::ReturnCode CreateChildVariablesFromExpression(
+        SQVM* v, const ExpressionNode* expressionNode, const data::PaginationInfo& pagination,
+        std::vector<data::Variable>& variables);
 
 class ScopedVerifySqTop {
  public:
@@ -34,7 +47,8 @@ class ScopedVerifySqTop {
   }
   ~ScopedVerifySqTop()
   {
-    assert(sq_gettop(vm_) == initialDepth_);
+    const auto currentDepth = sq_gettop(vm_);
+    assert(currentDepth == initialDepth_);
   }
 
   // Deleted methods
@@ -47,6 +61,17 @@ class ScopedVerifySqTop {
   HSQUIRRELVM vm_;
   SQInteger initialDepth_;
 };
+
+
+class WatchParseError : public std::runtime_error {
+ public:
+  WatchParseError(const char* msg, const std::string::const_iterator pos)
+      : std::runtime_error(msg)
+      , pos(pos)
+  {}
+  const std::string::const_iterator pos;
+};
+std::unique_ptr<ExpressionNode> ParseExpression(std::string::const_iterator& pos, std::string::const_iterator end);
 
 }// namespace sdb::sq
 

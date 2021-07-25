@@ -93,6 +93,7 @@ void getClassesFullNameHelper(
     throw std::runtime_error("Must have a table at the top of the stack.");
   }
 
+  ScopedVerifySqTop scopedVerify(v);
   sq_pushnull(v);
 
   // Iterate over the table.
@@ -111,7 +112,10 @@ void getClassesFullNameHelper(
       if (type == OT_CLASS) {
         const auto classHash = sq_gethash(v, -1);
         if (classNames.find(classHash) != classNames.end()) {
-          throw std::runtime_error("class already added man");
+          sq_pop(v, 2); // pop iterator and key/value
+
+          // class already added - this table may have a reference to itself.
+          break;
         }
         classNames[classHash] = newNamespace;
       }
@@ -441,7 +445,6 @@ ReturnCode CreateChildVariablesFromIterable(
     }
     case OT_TABLE:
     case OT_INSTANCE:
-    case OT_CLOSURE:
     {
       sq_pushinteger(v, *pathBegin);
       if (!SQ_SUCCEEDED(sq_next(v, -2))) {
@@ -459,8 +462,74 @@ ReturnCode CreateChildVariablesFromIterable(
   }
 }
 
+ReturnCode CreateChildVariablesFromExpression(
+        SQVM* const v, const ExpressionNode* expressionNode, const PaginationInfo& pagination,
+        std::vector<Variable>& variables)
+{
+  ScopedVerifySqTop scopedVerify(v);
+
+  if (expressionNode == nullptr) {
+    // Add the children of the variable at the top of the stack to the list.
+    return CreateChildVariables(v, pagination, variables);
+  }
+
+  std::stringstream ss;
+
+  // Push the indexed child on to the stack
+  const auto type = sq_gettype(v, -1);
+  switch (type) {
+    case OT_ARRAY:
+    {
+      const auto arrSize = sq_getsize(v, -1);
+      if (expressionNode->type != ExpressionNodeType::Number) {
+        SDB_LOGD(__FILE__, "expressionNode must be of array type");
+        return ReturnCode::InvalidParameter;
+      }
+
+      errno = 0;
+      const int arrIndex = strtol(expressionNode->accessorValue.c_str(), nullptr, 10);
+      if (errno == ERANGE)
+      {
+        SDB_LOGD(__FILE__, "expressionNode value %s exceeds maximum parsable integer.", expressionNode->accessorValue.c_str());
+        return ReturnCode::InvalidParameter;
+      }
+      if (arrIndex >= arrSize) {
+        SDB_LOGD(__FILE__, "Array index %" PRIi32 " out of bounds", arrIndex);
+        return ReturnCode::InvalidParameter;
+      }
+
+      sq_pushinteger(v, arrIndex);
+      const auto sqRetVal = sq_get(v, -2);
+      if (!SQ_SUCCEEDED(sqRetVal)) {
+        SDB_LOGD(__FILE__, "Failed to get array index %d", arrIndex);
+        return ReturnCode::InvalidParameter;
+      }
+      const auto childRetVal = CreateChildVariablesFromExpression(v, expressionNode->next.get(), pagination, variables);
+      sq_poptop(v);// pop value
+      return childRetVal;
+    }
+    case OT_TABLE:
+    case OT_INSTANCE:
+    {
+      sq_pushstring(v, expressionNode->accessorValue.c_str(), expressionNode->accessorValue.size());
+      if (!SQ_SUCCEEDED(sq_get(v, -2))) {
+        SDB_LOGD(__FILE__, "Failed to read accessor %s", expressionNode->accessorValue.c_str());
+        return ReturnCode::InvalidParameter;
+      }
+      const auto childRetVal = CreateChildVariablesFromExpression(v, expressionNode->next.get(), pagination, variables);
+      sq_poptop(v);// pop value
+      return childRetVal;
+    }
+    default:
+      SDB_LOGD(__FILE__, "Iterator points to non iterable type: %d", type);
+      return ReturnCode::InvalidParameter;
+  }
+}
+
 std::string ToClassFullName(SQVM* const v, const SQInteger idx)
 {
+  ScopedVerifySqTop scopedVerify(v);
+
   // TODO: May want to cache this bad boy. Is this even possible?
 
   if (sq_gettype(v, -1) != OT_CLASS) {
@@ -515,5 +584,246 @@ std::string ToClassFullName(SQVM* const v, const SQInteger idx)
   }
 
   throw std::runtime_error("Unknown class");
+}
+
+
+
+std::string ReadString(std::string::const_iterator& pos, std::string::const_iterator end)
+{
+  const char enclosingChar = *(pos++);
+  const char* eofError =
+          enclosingChar == '\'' ? "Encountered EOF when looking for '" : "Encountered EOF when looking for \"";
+
+  const auto processStringEscape = [&](std::string& dest, const int maxDigits) {
+    char c = *(++pos);
+    if (pos == end) {
+      throw WatchParseError(eofError, pos);
+    }
+    if (0 == isxdigit(c)) {
+      throw WatchParseError("hexadecimal number expected", pos);
+    }
+    int n = 0;
+    while (0 != isxdigit(c) && n < maxDigits) {
+      dest[n] = c;
+      ++n;
+      c = *(++pos);
+      if (pos == end) {
+        throw WatchParseError(eofError, pos);
+      }
+    }
+  };
+
+  std::string output;
+  for (; pos != end; ++pos) {
+    switch (char c = *pos; c) {
+      case '\\':
+        c = *(++pos);
+        if (pos == end) {
+          throw WatchParseError(eofError, pos);
+        }
+        switch (c) {
+          case 't':
+            output += '\t';
+            break;
+          case 'a':
+            output += '\a';
+            break;
+          case 'b':
+            output += '\b';
+            break;
+          case 'n':
+            output += '\n';
+            break;
+          case 'r':
+            output += '\r';
+            break;
+          case 'v':
+            output += '\v';
+            break;
+          case 'f':
+            output += '\f';
+            break;
+          case '0':
+            output += '\0';
+            break;
+          case '\\':
+          case '"':
+          case '\'':
+            output += c;
+            break;
+          case 'x':
+          {
+            const size_t maxDigits = sizeof(SQChar) * 2;
+            std::string temp(maxDigits, '0');
+            processStringEscape(temp, maxDigits);
+            char* stemp;
+            output += static_cast<SQChar>(scstrtoul(temp.c_str(), &stemp, 16));
+            break;
+          }
+          case 'u':
+          case 'U':
+          {
+            const size_t maxDigits = c == 'u' ? 4 : 8;
+            std::string temp(maxDigits, '0');
+            processStringEscape(temp, 8);
+            char* stemp;
+#ifdef SQUNICODE
+#if WCHAR_SIZE == 2
+#error not implemented
+#else
+#error not implemented
+#endif
+#else
+            output += static_cast<SQChar>(scstrtoul(temp.c_str(), &stemp, 16));
+#endif
+            break;
+          }
+          default:
+            throw WatchParseError("unknown escape character", pos);
+        }
+        break;
+      case '"':
+      case '\'':
+        if (c == enclosingChar) {
+          ++pos;
+          return output;
+        }
+        output += c;
+        break;
+      case '\n':
+        throw WatchParseError("newline in an inline string", pos);
+      default:
+        output += c;
+    }
+  }
+
+  return output;
+}
+
+std::string ReadNumber(std::string::const_iterator& pos, const std::string::const_iterator end)
+{
+  const auto first = pos;
+  for (; pos != end; ++pos) {
+    const char c = *pos;
+    if (0 == isdigit(c)) {
+      break;
+    }
+  }
+
+  return std::string(first, pos);
+}
+
+std::string ReadIdentifier(std::string::const_iterator& pos, const std::string::const_iterator end)
+{
+  const auto first = pos;
+  for (; pos != end; ++pos) {
+    const char c = *pos;
+    if (0 == isalnum(c) && c != '_') {
+      break;
+    }
+  }
+
+  return std::string(first, pos);
+}
+
+std::unique_ptr<ExpressionNode> ParseExpression(std::string::const_iterator& pos, const std::string::const_iterator end)
+{
+  auto rootExpression = std::make_unique<ExpressionNode>();
+  auto currentExpression = rootExpression.get();
+  for (; pos != end;) {
+    switch (const char c = *pos; c) {
+      case ' ':
+        ++pos;
+        break;
+      case '.':
+      {
+        if (currentExpression->type != ExpressionNodeType::Identifier) {
+          throw WatchParseError("Attempted to access field of a non-identifier", pos);
+        }
+
+        currentExpression->next = std::make_unique<ExpressionNode>();
+        currentExpression = currentExpression->next.get();
+        ++pos;
+
+        // Peek at the next character to make sure it's a valid identifier character
+        if (pos == end) {
+          throw WatchParseError("Expected identifier character after . but got EOF", pos);
+        }
+
+        if (0 == isalnum(*pos) && *pos != '_') {
+          throw WatchParseError("Expected identifier character after .", pos);
+        }
+
+        break;
+      }
+      case '[':
+      {
+        if (currentExpression->type != ExpressionNodeType::String &&
+            currentExpression->type != ExpressionNodeType::Identifier) {
+          throw WatchParseError("[ must follow an identifier or string", pos);
+        }
+
+        ++pos;
+        currentExpression->next = std::make_unique<ExpressionNode>();
+        currentExpression = currentExpression->next.get();
+        currentExpression->type = ExpressionNodeType::Identifier;
+
+        currentExpression->accessorExpression = ParseExpression(pos, end);
+        if (currentExpression->accessorExpression->type == ExpressionNodeType::Undefined) {
+          throw WatchParseError("Could not create accessor expression", pos);
+        }
+
+        // The call to ReadExpression will also consume the ] so we don't need to increment it.
+        break;
+      }
+      case ']':
+      {
+        if (currentExpression->type == ExpressionNodeType::Undefined) {
+          throw WatchParseError("Closing square bracket without a contained expression", pos);
+        }
+
+        ++pos;
+        return rootExpression;
+      }
+      case '"':
+      case '\'':
+      {
+        if (currentExpression->type != ExpressionNodeType::Undefined) {
+          throw WatchParseError("String must not follow another expression", pos);
+        }
+
+        currentExpression->accessorValue = ReadString(pos, end);
+        currentExpression->type = ExpressionNodeType::String;
+
+        // ReadString will increment `pos` past the end of the expression
+        // so we don't need to increment it.
+        break;
+      }
+      default:
+        if (currentExpression->type != ExpressionNodeType::Undefined) {
+          throw WatchParseError("Identifier or number must not directly follow another expression", pos);
+        }
+
+        if (0 != isdigit(c)) {
+          // read a number
+          currentExpression->type = ExpressionNodeType::Number;
+          currentExpression->accessorValue = ReadNumber(pos, end);
+        }
+        else if (0 != isalpha(c) || c == '_') {
+          // read an identifier
+          currentExpression->type = ExpressionNodeType::Identifier;
+          currentExpression->accessorValue = ReadIdentifier(pos, end);
+        }
+        else {
+          throw WatchParseError("Invalid character, expected alphanumeric or underscore.", pos);
+        }
+
+        // ReadNumber and ReadIdentifier will increment `pos` past the end of the expression
+        // so we don't need to increment it.
+        break;
+    }
+  }
+
+  return rootExpression;
 }
 }// namespace sdb::sq
