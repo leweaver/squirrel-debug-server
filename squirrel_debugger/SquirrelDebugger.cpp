@@ -14,23 +14,24 @@
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 using sdb::SquirrelDebugger;
+using sdb::data::ImmediateValue;
 using sdb::data::PaginationInfo;
 using sdb::data::ReturnCode;
 using sdb::data::RunState;
 using sdb::data::StackEntry;
 using sdb::data::Status;
 using sdb::data::Variable;
-using sdb::data::ImmediateValue;
 
 using sdb::sq::CreateChildVariable;
+using sdb::sq::CreateChildVariableFromExpression;
 using sdb::sq::CreateChildVariablesFromIterable;
-using sdb::sq::CreateChildVariablesFromExpression;
-using sdb::sq::ScopedVerifySqTop;
-using sdb::sq::WatchParseError;
 using sdb::sq::ExpressionNode;
 using sdb::sq::ExpressionNodeType;
+using sdb::sq::ScopedVerifySqTop;
+using sdb::sq::WatchParseError;
 
 using LockGuard = std::lock_guard<std::recursive_mutex>;
 
@@ -281,8 +282,8 @@ void PrintNode(ExpressionNode* node)
 }
 
 ReturnCode SquirrelDebugger::GetImmediateValue(
-        const uint32_t stackFrame, const std::string& watch, const PaginationInfo& pagination,
-        ImmediateValue& foundVariable)
+        const int32_t stackFrame, const std::string& watch, const PaginationInfo& pagination,
+        ImmediateValue& foundRootVariable)
 {
   SDB_LOGD(kLogTag, "GetImmediateValue stackFrame=%" PRIu32 " watch=%s", stackFrame, watch.c_str());
 
@@ -307,8 +308,7 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
     return ReturnCode::InvalidParameter;
   }
 
-  SDB_LOGD(kLogTag, "Parsed OK, much wow!");
-  PrintNode(expressionRoot.get());
+  SDB_LOGD(kLogTag, "Parsed expression OK. Will now evaluate");
 
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
@@ -321,20 +321,44 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
   stack.push_back(expressionRoot.get());
 
   const auto vm = vmData_->vm;
+
+  //std::unordered_set<ExpressionNode*> treesWithResolvedAccessorExpressions;
+  std::unordered_map<ExpressionNode*, std::shared_ptr<ImmediateValue>> expressionResults;
+
   while (!stack.empty()) {
     ExpressionNode* node = stack.back();
-    if (node->accessorExpression != nullptr)
-    {
-      stack.push_back(node->accessorExpression.get());
+
+    // does it have a next that hasn't had it's accessorExpressions resolved yet?
+    if (node->next != nullptr && expressionResults.find(node->next.get()) == expressionResults.end()) {
+      // If so, need to make sure that the next node's accessorExpression is resolved first.
+      stack.push_back(node->next.get());
+      continue;
     }
-    else {
 
-      stack.pop_back();
+    // Is there an accessor expression?
+    const auto expressionResultPos = expressionResults.find(node->accessorExpression.get());
+    if (node->accessorExpression != nullptr) {
+      // If it's unresolved, find the value first.
+      if (expressionResultPos == expressionResults.end()) {
+        stack.push_back(node->accessorExpression.get());
+        continue;
+      }
 
-      // evaluate this expression - which has NO sub expressions.
-      std::vector<Variable> variables;
+      // Change the node to a non-identifier type, so that the CreateChildVariableFromExpression
+      // can perform direct lookups.
+      const auto& variable = expressionResultPos->second->variable;
+      node->accessorValue = variable.value;
+      node->type = variable.valueType == data::VariableType::String ? ExpressionNodeType::String : ExpressionNodeType::Number;
+    }
 
-      {
+    // Got here - this and all next nodes have been totally resolved, so it's safe to assume all accessorValue's are correct.
+    stack.pop_back();
+
+    auto immediateValue = std::make_shared<ImmediateValue>();
+    if (node->type == ExpressionNodeType::Identifier) {
+      // evaluate this expression accessor
+      const std::string& accessorValue = node->accessorValue;
+      if (stackFrame >= 0) {
         ScopedVerifySqTop scopedVerify(vm);
         // Is there a local by this name?
         sq_newtable(vm);
@@ -344,64 +368,69 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
           if (localName == nullptr) {
             break;
           }
-          if (localName == node->accessorValue) {
-            sq_pushstring(vm, localName, node->accessorValue.size());
+          if (localName == accessorValue) {
+            sq_pushstring(vm, localName, accessorValue.size());
             sq_push(vm, -2);
             sq_rawset(vm, -4);
             sq_poptop(vm);// pop local variable now so that the table is passed in to the expression
-            const auto rc = CreateChildVariablesFromExpression(vm, node->next.get(), pagination, variables);
+            const auto rc = CreateChildVariableFromExpression(
+                    vm, node, pagination, immediateValue->variable, immediateValue->iteratorPath);
             if (rc != ReturnCode::Success) {
-              SDB_LOGD(kLogTag, "Failed to read local variable: %s", node->accessorValue.c_str());
+              sq_poptop(vm);// pop temp table
+              SDB_LOGD(kLogTag, "Failed to read local variable: %s", accessorValue.c_str());
               return rc;
             }
-            foundVariable.scope = data::VariableScope::Local;
+            // replace the first iterator (which is just the index into our temp TABLE) with the iterator of the local.
+            immediateValue->iteratorPath[0] = static_cast<uint32_t>(nSeq);
+            immediateValue->scope = data::VariableScope::Local;
             break;
           }
 
           sq_poptop(vm);// pop local variable
         }
-        sq_poptop(vm); // pop temp table
+        sq_poptop(vm);// pop temp table
+      }
 
-        if (variables.empty()) {
-          sq_pushroottable(vm);
-          const auto rc = CreateChildVariablesFromExpression(vm, node, pagination, variables);
-          sq_poptop(vm);
-          if (rc != ReturnCode::Success) {
-            SDB_LOGD(kLogTag, "Failed to read variable from root table: %s", node->accessorValue.c_str());
-            return rc;
-          }
-          foundVariable.scope = data::VariableScope::Global;
+      if (immediateValue->iteratorPath.empty()) {
+        sq_pushroottable(vm);
+        const auto rc = CreateChildVariableFromExpression(
+                vm, node, pagination, immediateValue->variable, immediateValue->iteratorPath);
+        sq_poptop(vm);
+        if (rc != ReturnCode::Success) {
+          SDB_LOGD(kLogTag, "Failed to read variable from root table: %s", accessorValue.c_str());
+          return rc;
         }
+        immediateValue->scope = data::VariableScope::Global;
       }
-      
-      if (variables.size() != 1) {
-        SDB_LOGE(kLogTag, "Expected exacly 1 variable for last expressionNode %s", expressionRoot->accessorValue.c_str());
-        return ReturnCode::ErrorInternal;
-      }
+    }
+    else
+    {
+      immediateValue->scope = data::VariableScope::Evaluation;
+      immediateValue->variable.value = node->accessorValue;
+      immediateValue->variable.valueType =
+              node->type == ExpressionNodeType::String ? data::VariableType::String : data::VariableType::Integer;
+    }
 
-      if (stack.empty())
-      {
-        foundVariable.variable = variables.at(0);
-        return ReturnCode::Success;
-      }
+    if (node == expressionRoot.get()) {
+      foundRootVariable = *immediateValue;
+      return ReturnCode::Success;
+    }
 
-      const auto& variable = variables.at(0);
-      if (variable.valueType == data::VariableType::Integer) {
-        node->type = ExpressionNodeType::Number;
-      }
-      else if (variable.valueType == data::VariableType::String) {
-        node->type = ExpressionNodeType::String;
-      }
-      else {
-        SDB_LOGD(kLogTag, "Expression must resolve to a string or number.");
-        return ReturnCode::InvalidParameter;
-      }
-      node->accessorValue = variable.value;
-      node->accessorExpression.reset();
+    // This node is solved, record the results to be used later.
+    if (immediateValue->variable.valueType == data::VariableType::Integer ||
+        immediateValue->variable.valueType == data::VariableType::String)
+    {
+      expressionResults[node] = immediateValue;
+    }
+    else {
+      // TODO: What if TABLE keys of non-string types want to be accessed?
+      SDB_LOGD(kLogTag, "Expression must resolve to a string or number.");
+      return ReturnCode::InvalidParameter;
     }
   }
 
-  return ReturnCode::Success;
+  SDB_LOGD(kLogTag, "Expression must not be empty.");
+  return ReturnCode::InvalidParameter;
 }
 
 ReturnCode SquirrelDebugger::SetFileBreakpoints(

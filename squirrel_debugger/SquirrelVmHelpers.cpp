@@ -462,15 +462,20 @@ ReturnCode CreateChildVariablesFromIterable(
   }
 }
 
-ReturnCode CreateChildVariablesFromExpression(
-        SQVM* const v, const ExpressionNode* expressionNode, const PaginationInfo& pagination,
-        std::vector<Variable>& variables)
+ReturnCode CreateChildVariableFromExpression(
+        SQVM* const v, const ExpressionNode* expressionNode, const PaginationInfo& pagination, Variable& variable,
+        std::vector<uint32_t>& iteratorPath)
 {
   ScopedVerifySqTop scopedVerify(v);
 
   if (expressionNode == nullptr) {
-    // Add the children of the variable at the top of the stack to the list.
-    return CreateChildVariables(v, pagination, variables);
+    // Add the variable at the top of the stack to the list.
+    const auto ret = CreateChildVariable(v, variable);
+    if (ret != ReturnCode::Success)
+    {
+      return ret;
+    }
+    return ReturnCode::Success;
   }
 
   std::stringstream ss;
@@ -504,21 +509,57 @@ ReturnCode CreateChildVariablesFromExpression(
         SDB_LOGD(__FILE__, "Failed to get array index %d", arrIndex);
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = CreateChildVariablesFromExpression(v, expressionNode->next.get(), pagination, variables);
+
+      iteratorPath.push_back(arrIndex);
+      const auto childRetVal =
+              CreateChildVariableFromExpression(v, expressionNode->next.get(), pagination, variable, iteratorPath);
       sq_poptop(v);// pop value
       return childRetVal;
     }
     case OT_TABLE:
     case OT_INSTANCE:
     {
+      /*
+       * This is the most efficient way to do it, but since SQ doesn't expose the iterator, we need to iterate to find it. Oh well.
       sq_pushstring(v, expressionNode->accessorValue.c_str(), expressionNode->accessorValue.size());
       if (!SQ_SUCCEEDED(sq_get(v, -2))) {
         SDB_LOGD(__FILE__, "Failed to read accessor %s", expressionNode->accessorValue.c_str());
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = CreateChildVariablesFromExpression(v, expressionNode->next.get(), pagination, variables);
+      const auto childRetVal = CreateChildVariableFromExpression(v, expressionNode->next.get(), pagination, variable, iteratorPath);
       sq_poptop(v);// pop value
-      return childRetVal;
+      */
+
+      SQInteger sqIter = 0;
+      sq_pushinteger(v, sqIter);
+      while (SQ_SUCCEEDED(sq_getinteger(v, -1, &sqIter)) && SQ_SUCCEEDED(sq_next(v, -2))) {
+        if (sq_gettype(v, -2) == OT_STRING )
+        {
+          const SQChar* str;
+          SQInteger strLen;
+          if (!SQ_SUCCEEDED(sq_getstringandsize(v, -2, &str, &strLen)))
+          {
+            SDB_LOGD(__FILE__, "Fatal: failed to read sq string");
+            sq_pop(v, 3); // pop value, key and null iterator
+            return ReturnCode::ErrorInternal;
+          }
+
+          const auto keyStr = std::string_view(str, strLen);
+          if (keyStr.compare(expressionNode->accessorValue) == 0) {
+            iteratorPath.push_back(static_cast<uint32_t>(sqIter));
+            const auto childRetVal = CreateChildVariableFromExpression(
+                    v, expressionNode->next.get(), pagination, variable, iteratorPath);
+            sq_pop(v, 3); // pop value, key and null iterator
+            return childRetVal;
+          }
+        }
+        sq_pop(v, 2); // pop value and key
+      }
+      sq_poptop(v);// pop null iterator
+
+      // Didn't find anything
+      SDB_LOGD(__FILE__, "No matching key in table: %s", expressionNode->accessorValue.c_str());
+      return ReturnCode::InvalidParameter;
     }
     default:
       SDB_LOGD(__FILE__, "Iterator points to non iterable type: %d", type);

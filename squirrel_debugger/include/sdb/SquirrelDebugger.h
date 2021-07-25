@@ -55,7 +55,7 @@ class SquirrelDebugger final : public MessageCommandInterface {
           std::vector<data::ResolvedBreakpoint>& resolvedBps) override;
 
   [[nodiscard]] data::ReturnCode GetImmediateValue(
-          uint32_t stackFrame, const std::string& watch, const data::PaginationInfo& pagination,
+          int32_t stackFrame, const std::string& watch, const data::PaginationInfo& pagination,
           data::ImmediateValue& variable) override;
 
   // The following methods should be called from the scripting engine (VM) thread in response to Squirrel Debug Hooks.

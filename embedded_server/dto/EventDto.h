@@ -53,7 +53,8 @@ ENUM(VariableType, v_int32,
 
 ENUM(VariableScope, v_int32,
     VALUE(Local,      0, "local"),
-    VALUE(Global,     1, "global"))
+    VALUE(Global,     1, "global"),
+    VALUE(Evaluation, 2, "evaluation"))
 // clang-format on
 
 template<typename TMessageBody>
@@ -101,6 +102,7 @@ class ImmediateValue : public oatpp::DTO {
 
   DTO_FIELD(Object<Variable>, variable);
   DTO_FIELD(Enum<VariableScope>, variableScope);
+  DTO_FIELD(List<UInt32>, iteratorPath);
 };
 
 class ImmediateValueList : public CommandMessageResponse {

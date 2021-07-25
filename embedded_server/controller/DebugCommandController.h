@@ -131,12 +131,12 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
 
   ENDPOINT(
-          "PUT", "Variables/Immediate/{stackFrame}", StackImmediate, PATH(UInt32, stackFrame),
+          "PUT", "Variables/Immediate/{stackFrame}", StackImmediate, PATH(Int32, stackFrame),
           QUERIES(QueryParams, queryParams), BODY_DTO(List<String>, immediateStrings))
   {
     auto getVariablesFn = [&](const data::PaginationInfo& pagination) {
       const List<String>& isList = immediateStrings;
-      std::vector<data::ImmediateValue> variables;
+      std::vector<data::ImmediateValue> immediateValues;
       data::ReturnCode ret = data::ReturnCode::Success;
       for (auto i = 0U; i < isList->size(); ++i) {
         const auto& immediateString = isList[i];
@@ -145,9 +145,9 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
         if (ret != data::ReturnCode::Success) {
           break;
         }
-        variables.push_back(iv);
+        immediateValues.push_back(iv);
       }
-      return std::tuple(ret, variables);
+      return std::tuple(ret, immediateValues);
     };
 
     data::PaginationInfo pagination = {};
@@ -165,12 +165,16 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
 
     const auto varListDto = dto::ImmediateValueList::createShared();
     varListDto->values = List<Object<dto::ImmediateValue>>::createShared();
-    for (const auto& [variable, scope] : values)
+    for (const auto& [variable, scope, iteratorPath] : values)
     {
       auto valueDto = dto::ImmediateValue::createShared();
       varListDto->values->push_back(valueDto);
       valueDto->variable = CreateVariable(variable);
       valueDto->variableScope = static_cast<dto::VariableScope>(scope);
+      valueDto->iteratorPath = List<UInt32>::createShared();
+      for (const auto iterator : iteratorPath) {
+        valueDto->iteratorPath->push_back(iterator);
+      }
     }
 
     varListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
@@ -178,6 +182,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
   ENDPOINT_INFO(StackImmediate)
   {
+    info->pathParams.add<Int32>("stackFrame").description = "Evaluate the expression in the scope of this stack frame. If -1, the expression is evaluated in the global scope.";
     info->addResponse<Object<dto::ImmediateValueList>>(Status::CODE_200, "application/json");
     AddCommandMessagePaginationParams(info);
     AddCommandMessageErrorResponses(info);
