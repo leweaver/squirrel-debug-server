@@ -462,18 +462,17 @@ ReturnCode CreateChildVariablesFromIterable(
   }
 }
 
-ReturnCode CreateChildVariableFromExpression(
-        SQVM* const v, const ExpressionNode* expressionNode, const PaginationInfo& pagination, Variable& variable,
+ReturnCode GetObjectFromExpression(
+        SQVM* const v, const SqExpressionNode* expressionNode, const PaginationInfo& pagination, HSQOBJECT& foundObject,
         std::vector<uint32_t>& iteratorPath)
 {
   ScopedVerifySqTop scopedVerify(v);
 
   if (expressionNode == nullptr) {
     // Add the variable at the top of the stack to the list.
-    const auto ret = CreateChildVariable(v, variable);
-    if (ret != ReturnCode::Success)
-    {
-      return ret;
+    if (!SQ_SUCCEEDED(sq_getstackobj(v, -1, &foundObject))) {
+      SDB_LOGD(__FILE__, "Failed to read object from the stack");
+      return ReturnCode::ErrorInternal;
     }
     return ReturnCode::Success;
   }
@@ -485,80 +484,54 @@ ReturnCode CreateChildVariableFromExpression(
   switch (type) {
     case OT_ARRAY:
     {
-      const auto arrSize = sq_getsize(v, -1);
-      if (expressionNode->type != ExpressionNodeType::Number) {
-        SDB_LOGD(__FILE__, "expressionNode must be of array type");
+      if (!sq_isnumeric(expressionNode->accessorObject)) {
+        SDB_LOGD(__FILE__, "Failed to get from array, key is not numeric.");
         return ReturnCode::InvalidParameter;
       }
 
-      errno = 0;
-      const int arrIndex = strtol(expressionNode->accessorValue.c_str(), nullptr, 10);
-      if (errno == ERANGE)
-      {
-        SDB_LOGD(__FILE__, "expressionNode value %s exceeds maximum parsable integer.", expressionNode->accessorValue.c_str());
-        return ReturnCode::InvalidParameter;
-      }
-      if (arrIndex >= arrSize) {
-        SDB_LOGD(__FILE__, "Array index %" PRIi32 " out of bounds", arrIndex);
-        return ReturnCode::InvalidParameter;
-      }
-
-      sq_pushinteger(v, arrIndex);
+      sq_pushobject(v, expressionNode->accessorObject);
+      SQInteger arrIndex;
+      sq_getinteger(v, -1, &arrIndex);
       const auto sqRetVal = sq_get(v, -2);
       if (!SQ_SUCCEEDED(sqRetVal)) {
         SDB_LOGD(__FILE__, "Failed to get array index %d", arrIndex);
         return ReturnCode::InvalidParameter;
       }
 
-      iteratorPath.push_back(arrIndex);
+      iteratorPath.push_back(static_cast<uint32_t>(arrIndex));
       const auto childRetVal =
-              CreateChildVariableFromExpression(v, expressionNode->next.get(), pagination, variable, iteratorPath);
+              GetObjectFromExpression(v, expressionNode->next.get(), pagination, foundObject, iteratorPath);
       sq_poptop(v);// pop value
       return childRetVal;
     }
     case OT_TABLE:
     case OT_INSTANCE:
     {
-      /*
-       * This is the most efficient way to do it, but since SQ doesn't expose the iterator, we need to iterate to find it. Oh well.
-      sq_pushstring(v, expressionNode->accessorValue.c_str(), expressionNode->accessorValue.size());
+        // Get the object that we're looking for, so we can iterate through all keys to find the iterator we want.
+      sq_pushobject(v, expressionNode->accessorObject);
       if (!SQ_SUCCEEDED(sq_get(v, -2))) {
-        SDB_LOGD(__FILE__, "Failed to read accessor %s", expressionNode->accessorValue.c_str());
+        SDB_LOGD(__FILE__, "Failed to read accessor");
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = CreateChildVariableFromExpression(v, expressionNode->next.get(), pagination, variable, iteratorPath);
-      sq_poptop(v);// pop value
-      */
 
       SQInteger sqIter = 0;
       sq_pushinteger(v, sqIter);
-      while (SQ_SUCCEEDED(sq_getinteger(v, -1, &sqIter)) && SQ_SUCCEEDED(sq_next(v, -2))) {
-        if (sq_gettype(v, -2) == OT_STRING )
-        {
-          const SQChar* str;
-          SQInteger strLen;
-          if (!SQ_SUCCEEDED(sq_getstringandsize(v, -2, &str, &strLen)))
-          {
-            SDB_LOGD(__FILE__, "Fatal: failed to read sq string");
-            sq_pop(v, 3); // pop value, key and null iterator
-            return ReturnCode::ErrorInternal;
-          }
-
-          const auto keyStr = std::string_view(str, strLen);
-          if (keyStr.compare(expressionNode->accessorValue) == 0) {
-            iteratorPath.push_back(static_cast<uint32_t>(sqIter));
-            const auto childRetVal = CreateChildVariableFromExpression(
-                    v, expressionNode->next.get(), pagination, variable, iteratorPath);
-            sq_pop(v, 3); // pop value, key and null iterator
-            return childRetVal;
-          }
+      HSQOBJECT iterKey;
+      while (SQ_SUCCEEDED(sq_getinteger(v, -1, &sqIter)) && SQ_SUCCEEDED(sq_next(v, -3))) {
+        sq_getstackobj(v, -2, &iterKey);
+        if (iterKey._unVal.raw == expressionNode->accessorObject._unVal.raw) {
+          iteratorPath.push_back(static_cast<uint32_t>(sqIter));
+          const auto childRetVal = GetObjectFromExpression(v, expressionNode->next.get(), pagination, foundObject, iteratorPath);
+          sq_pop(v, 4); // pop value, key, null iterator, initially found value
+          return childRetVal;
         }
         sq_pop(v, 2); // pop value and key
       }
       sq_poptop(v);// pop null iterator
+      sq_poptop(v);// pop initially found value
 
       // Didn't find anything
-      SDB_LOGD(__FILE__, "No matching key in table: %s", expressionNode->accessorValue.c_str());
+      SDB_LOGD(__FILE__, "No matching key in table");
       return ReturnCode::InvalidParameter;
     }
     default:
@@ -791,7 +764,7 @@ std::unique_ptr<ExpressionNode> ParseExpression(std::string::const_iterator& pos
           throw WatchParseError("Expected identifier character after . but got EOF", pos);
         }
 
-        if (0 == isalnum(*pos) && *pos != '_') {
+        if (0 == isalpha(*pos) && *pos != '_') {
           throw WatchParseError("Expected identifier character after .", pos);
         }
 
