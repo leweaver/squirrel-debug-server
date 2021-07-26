@@ -26,8 +26,8 @@ using sdb::data::Status;
 using sdb::data::Variable;
 
 using sdb::sq::CreateChildVariable;
-using sdb::sq::CreateChildVariableFromExpression;
 using sdb::sq::CreateChildVariablesFromIterable;
+using sdb::sq::GetObjectFromExpression;
 using sdb::sq::ExpressionNode;
 using sdb::sq::ExpressionNodeType;
 using sdb::sq::ScopedVerifySqTop;
@@ -281,6 +281,24 @@ void PrintNode(ExpressionNode* node)
   }
 }
 
+struct RefOwner {
+  RefOwner(HSQUIRRELVM vm)
+      : vm(vm)
+  {}
+
+  ~RefOwner()
+  {
+    if (vm) {
+      for (auto po : objectsToCleanup) {
+        sq_release(vm, &po);
+      }
+    }
+  }
+
+  std::vector<HSQOBJECT> objectsToCleanup;
+  HSQUIRRELVM vm = nullptr;
+};
+
 ReturnCode SquirrelDebugger::GetImmediateValue(
         const int32_t stackFrame, const std::string& watch, const PaginationInfo& pagination,
         ImmediateValue& foundRootVariable)
@@ -316,46 +334,107 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
     return ReturnCode::InvalidNotPaused;
   }
 
-  // Evaluate all sub-expressions
+  // Stack of expression roots, that need to be evaluated by sq::GetObjectFromExpression
   std::deque<ExpressionNode*> stack;
   stack.push_back(expressionRoot.get());
 
   const auto vm = vmData_->vm;
+  auto refOwner = RefOwner(vm);
+
+  // For each node in the expression tree:
+  // if it has an accessorExpression, need to evaluate that first: so put it on the stack
 
   //std::unordered_set<ExpressionNode*> treesWithResolvedAccessorExpressions;
-  std::unordered_map<ExpressionNode*, std::shared_ptr<ImmediateValue>> expressionResults;
+  struct ExpressionNodeState {
+    std::unique_ptr<sq::SqExpressionNode> sqNode;
+    std::vector<uint32_t> iteratorPath;
+    HSQOBJECT resolvedValue;
+    data::VariableScope scope;
+  };
+  std::unordered_map<ExpressionNode*, ExpressionNodeState> expressionResults;
 
   while (!stack.empty()) {
     ExpressionNode* node = stack.back();
 
-    // does it have a next that hasn't had it's accessorExpressions resolved yet?
-    if (node->next != nullptr && expressionResults.find(node->next.get()) == expressionResults.end()) {
-      // If so, need to make sure that the next node's accessorExpression is resolved first.
-      stack.push_back(node->next.get());
-      continue;
-    }
-
-    // Is there an accessor expression?
-    const auto expressionResultPos = expressionResults.find(node->accessorExpression.get());
-    if (node->accessorExpression != nullptr) {
-      // If it's unresolved, find the value first.
-      if (expressionResultPos == expressionResults.end()) {
-        stack.push_back(node->accessorExpression.get());
-        continue;
+    // Look through the 'next' list and add any root expressions that need evaluating.
+    {
+      ExpressionNode* nextNode = node;
+      bool hasUnresolvedDependencies = false;
+      while (nextNode != nullptr) {
+        if (nextNode->accessorExpression != nullptr &&
+            expressionResults.find(nextNode->accessorExpression.get()) == expressionResults.end())
+        {
+          // If so, need to make sure that the next node's accessorExpression is resolved first.
+          stack.push_back(nextNode->accessorExpression.get());
+          hasUnresolvedDependencies = true;
+        }
+        nextNode = nextNode->next.get();
       }
 
-      // Change the node to a non-identifier type, so that the CreateChildVariableFromExpression
-      // can perform direct lookups.
-      const auto& variable = expressionResultPos->second->variable;
-      node->accessorValue = variable.value;
-      node->type = variable.valueType == data::VariableType::String ? ExpressionNodeType::String : ExpressionNodeType::Number;
+      if (hasUnresolvedDependencies) {
+        continue;
+      }
     }
 
-    // Got here - this and all next nodes have been totally resolved, so it's safe to assume all accessorValue's are correct.
     stack.pop_back();
 
-    auto immediateValue = std::make_shared<ImmediateValue>();
+    // Contains the execution results for this node.
+
+    // Create HSQOBJECT representations of all nodes in this tree
+    ExpressionNodeState nodeResult;
+    {
+      ExpressionNode* nodeIter = node;
+      nodeResult.sqNode = std::make_unique<sq::SqExpressionNode>();
+      sq::SqExpressionNode* lastSqNode = nodeResult.sqNode.get();
+      while (nodeIter != nullptr) {
+        auto& targetSqObject = lastSqNode->accessorObject;
+        if (nodeIter->accessorExpression != nullptr) {
+          auto accessorExpressionResultPos = expressionResults.find(nodeIter->accessorExpression.get());
+          if (accessorExpressionResultPos == expressionResults.end()) {
+            SDB_LOGE(
+                    kLogTag,
+                    "Attempting to resolve a root expression where the accessor expression is not yet resolved.");
+            return ReturnCode::ErrorInternal;
+          }
+          targetSqObject = accessorExpressionResultPos->second.resolvedValue;
+        }
+        else
+        {
+          if (node->type == ExpressionNodeType::Number) {
+            errno = 0;
+            const int intVal = strtol(node->accessorValue.c_str(), nullptr, 10);
+            if (errno == ERANGE) {
+              SDB_LOGD(
+                      __FILE__, "expressionNode value %s exceeds maximum parsable integer.",
+                      node->accessorValue.c_str());
+              return ReturnCode::InvalidParameter;
+            }
+            sq_pushinteger(vm, intVal);
+            sq_getstackobj(vm, -1, &targetSqObject);
+            sq_poptop(vm);
+          }
+          else {
+            // It's a string, which is ref counted. So need to make sure we keep it alive, then clean up after ourselves later.
+            const SQChar* chars = node->accessorValue.c_str();
+            sq_pushstring(vm, chars, node->accessorValue.size());
+            sq_getstackobj(vm, -1, &targetSqObject);
+            sq_addref(vm, &targetSqObject);
+            refOwner.objectsToCleanup.push_back(targetSqObject);
+            sq_poptop(vm);
+          }
+        }
+
+        nodeIter = nodeIter->next.get();
+        if (nodeIter != nullptr) {
+          lastSqNode->next = std::make_unique<sq::SqExpressionNode>();
+        }
+        lastSqNode = lastSqNode->next.get();
+      }
+    }
+
     if (node->type == ExpressionNodeType::Identifier) {
+      auto& iteratorPath = nodeResult.iteratorPath;
+
       // evaluate this expression accessor
       const std::string& accessorValue = node->accessorValue;
       if (stackFrame >= 0) {
@@ -369,20 +448,24 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
             break;
           }
           if (localName == accessorValue) {
+
             sq_pushstring(vm, localName, accessorValue.size());
             sq_push(vm, -2);
             sq_rawset(vm, -4);
             sq_poptop(vm);// pop local variable now so that the table is passed in to the expression
-            const auto rc = CreateChildVariableFromExpression(
-                    vm, node, pagination, immediateValue->variable, immediateValue->iteratorPath);
+            const auto rc = GetObjectFromExpression(
+                    vm, nodeResult.sqNode.get(), pagination, nodeResult.resolvedValue, iteratorPath);
             if (rc != ReturnCode::Success) {
               sq_poptop(vm);// pop temp table
               SDB_LOGD(kLogTag, "Failed to read local variable: %s", accessorValue.c_str());
               return rc;
             }
-            // replace the first iterator (which is just the index into our temp TABLE) with the iterator of the local.
-            immediateValue->iteratorPath[0] = static_cast<uint32_t>(nSeq);
-            immediateValue->scope = data::VariableScope::Local;
+
+            // The first location in the iterator path will just be the iterator in the temporary table. Conveniently
+            // we can just replace this with the iterator to the local variable
+            iteratorPath[0] = static_cast<uint32_t>(nSeq);
+
+            nodeResult.scope = data::VariableScope::Local;
             break;
           }
 
@@ -391,46 +474,46 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
         sq_poptop(vm);// pop temp table
       }
 
-      if (immediateValue->iteratorPath.empty()) {
+      if (iteratorPath.empty()) {
         sq_pushroottable(vm);
-        const auto rc = CreateChildVariableFromExpression(
-                vm, node, pagination, immediateValue->variable, immediateValue->iteratorPath);
+        const auto rc = GetObjectFromExpression(
+                vm, nodeResult.sqNode.get(), pagination, nodeResult.resolvedValue, iteratorPath);
         sq_poptop(vm);
         if (rc != ReturnCode::Success) {
           SDB_LOGD(kLogTag, "Failed to read variable from root table: %s", accessorValue.c_str());
           return rc;
         }
-        immediateValue->scope = data::VariableScope::Global;
+        nodeResult.scope = data::VariableScope::Global;
       }
     }
     else
     {
-      immediateValue->scope = data::VariableScope::Evaluation;
-      immediateValue->variable.value = node->accessorValue;
-      immediateValue->variable.valueType =
-              node->type == ExpressionNodeType::String ? data::VariableType::String : data::VariableType::Integer;
+      nodeResult.resolvedValue = nodeResult.sqNode->accessorObject;
+      nodeResult.scope = data::VariableScope::Evaluation;
     }
 
-    if (node == expressionRoot.get()) {
-      foundRootVariable = *immediateValue;
-      return ReturnCode::Success;
-    }
-
-    // This node is solved, record the results to be used later.
-    if (immediateValue->variable.valueType == data::VariableType::Integer ||
-        immediateValue->variable.valueType == data::VariableType::String)
-    {
-      expressionResults[node] = immediateValue;
-    }
-    else {
-      // TODO: What if TABLE keys of non-string types want to be accessed?
-      SDB_LOGD(kLogTag, "Expression must resolve to a string or number.");
-      return ReturnCode::InvalidParameter;
-    }
+    expressionResults[node] = std::move(nodeResult);
   }
 
-  SDB_LOGD(kLogTag, "Expression must not be empty.");
-  return ReturnCode::InvalidParameter;
+  // Now convert the found SQOBJECT into a variable to return back
+  {
+    const auto rootResultPos = expressionResults.find(expressionRoot.get());
+    if (rootResultPos == expressionResults.end()) {
+      SDB_LOGD(kLogTag, "Expression must not be empty.");
+      return ReturnCode::InvalidParameter;
+    }
+
+    auto& nodeState = rootResultPos->second;
+
+    sq_pushobject(vm, nodeState.resolvedValue);
+    CreateChildVariable(vm, foundRootVariable.variable);
+    sq_poptop(vm);
+
+    foundRootVariable.iteratorPath = nodeState.iteratorPath;
+    foundRootVariable.scope = nodeState.scope;
+
+    return ReturnCode::Success;
+  }
 }
 
 ReturnCode SquirrelDebugger::SetFileBreakpoints(
