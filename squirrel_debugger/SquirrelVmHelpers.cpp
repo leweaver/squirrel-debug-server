@@ -112,7 +112,7 @@ void getClassesFullNameHelper(
       if (type == OT_CLASS) {
         const auto classHash = sq_gethash(v, -1);
         if (classNames.find(classHash) != classNames.end()) {
-          sq_pop(v, 2); // pop iterator and key/value
+          sq_pop(v, 2);// pop iterator and key/value
 
           // class already added - this table may have a reference to itself.
           break;
@@ -289,7 +289,30 @@ ReturnCode CreateChildVariable(SQVM* const v, Variable& variable)
       else {
         SDB_LOGD(__FILE__, "Failed to find classname");
       }
+
       [[fallthrough]];
+    }
+    // Case "Instance" falls through to here as well.
+    case VariableType::UserData:
+    {
+      // Read the count from the 'delegate', which is a table containing the fields and properties.
+      HSQOBJECT sqObj{};
+      variable.childCount = 0;
+      if (SQ_SUCCEEDED(sq_getstackobj(v, -1, &sqObj))) {
+        // There's an issue in the squirrel implementation of `sq_getdelegate` - it doesn't handle Instances.
+        // Hack the type to make it a table to trick the API (this doesn't change the underlying type)
+        sqObj._type = OT_TABLE;
+        sq_pushobject(v, sqObj);
+        if (SQ_SUCCEEDED(sq_getdelegate(v, -1))) {
+          variable.childCount = static_cast<uint32_t>(sq_getsize(v, -1));
+          sq_poptop(v);
+        }
+        else {
+          SDB_LOGD(__FILE__, "Failed to get delegate");
+        }
+        sq_poptop(v);
+      }
+      break;
     }
     case VariableType::Array:
     case VariableType::Table:
@@ -507,7 +530,7 @@ ReturnCode GetObjectFromExpression(
     case OT_TABLE:
     case OT_INSTANCE:
     {
-        // Get the object that we're looking for, so we can iterate through all keys to find the iterator we want.
+      // Get the object that we're looking for, so we can iterate through all keys to find the iterator we want.
       sq_pushobject(v, expressionNode->accessorObject);
       if (!SQ_SUCCEEDED(sq_get(v, -2))) {
         SDB_LOGD(__FILE__, "Failed to read accessor");
@@ -521,11 +544,12 @@ ReturnCode GetObjectFromExpression(
         sq_getstackobj(v, -2, &iterKey);
         if (iterKey._unVal.raw == expressionNode->accessorObject._unVal.raw) {
           iteratorPath.push_back(static_cast<uint32_t>(sqIter));
-          const auto childRetVal = GetObjectFromExpression(v, expressionNode->next.get(), pagination, foundObject, iteratorPath);
-          sq_pop(v, 4); // pop value, key, null iterator, initially found value
+          const auto childRetVal =
+                  GetObjectFromExpression(v, expressionNode->next.get(), pagination, foundObject, iteratorPath);
+          sq_pop(v, 4);// pop value, key, null iterator, initially found value
           return childRetVal;
         }
-        sq_pop(v, 2); // pop value and key
+        sq_pop(v, 2);// pop value and key
       }
       sq_poptop(v);// pop null iterator
       sq_poptop(v);// pop initially found value
@@ -599,7 +623,6 @@ std::string ToClassFullName(SQVM* const v, const SQInteger idx)
 
   throw std::runtime_error("Unknown class");
 }
-
 
 
 std::string ReadString(std::string::const_iterator& pos, std::string::const_iterator end)
