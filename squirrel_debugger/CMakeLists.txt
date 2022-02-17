@@ -40,3 +40,11 @@ target_link_libraries(${PROJECT_NAME}
         sdb::interfaces
         squirrel::squirrel_static
         squirrel::sqstdlib_static)
+
+#####
+# Testing
+#####
+if(SDB_BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

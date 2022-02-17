@@ -13,8 +13,12 @@
 #include <stdexcept>
 
 #include <string>
+#include <functional>
 
 namespace sdb::sq {
+
+using PathPartConstIter = std::vector<uint64_t>::const_iterator;
+
 enum class ExpressionNodeType { Undefined, String, Number, Identifier };
 
 struct ExpressionNode {
@@ -30,10 +34,13 @@ data::VariableType ToVariableType(SQObjectType sqType);
 std::string ToClassFullName(HSQUIRRELVM v, SQInteger idx);
 std::string ToString(HSQUIRRELVM v, SQInteger idx);
 
+data::ReturnCode UpdateFromString(SQVM* const v, SQInteger objIdx, const std::string& value);
+
 data::ReturnCode CreateChildVariable(HSQUIRRELVM v, data::Variable& variable);
 data::ReturnCode CreateChildVariablesFromIterable(
-        HSQUIRRELVM v, std::vector<uint64_t>::const_iterator pathBegin, std::vector<uint64_t>::const_iterator pathEnd,
+        HSQUIRRELVM v, PathPartConstIter pathBegin, PathPartConstIter pathEnd,
         const data::PaginationInfo& pagination, std::vector<data::Variable>& variables);
+data::ReturnCode WithVariableAtPath(SQVM* v, PathPartConstIter pathBegin, PathPartConstIter pathEnd, const std::function<data::ReturnCode()>& fn);
 
 struct SqExpressionNode {
   std::unique_ptr<SqExpressionNode> next;

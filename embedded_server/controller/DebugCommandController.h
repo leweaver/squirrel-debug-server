@@ -110,8 +110,28 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
   ENDPOINT_INFO(StackLocals)
   {
-    info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
+    info->addResponse<Object<dto::VariableListResponse>>(Status::CODE_200, "application/json");
     AddCommandMessagePaginationParams(info);
+    AddCommandMessageErrorResponses(info);
+  }
+
+  ENDPOINT(
+          "PUT", "Variables/Local/{stackFrame}", SetStackLocal, PATH(UInt32, stackFrame), QUERY(String, path), BODY_DTO(Object<dto::VariableSetValueBody>, setValueBody))
+  {
+    std::vector<data::Variable> newValues = {{}};
+    const auto ret = messageCommandInterface_->SetStackVariableValue(stackFrame, path->std_str(), setValueBody->value->std_str(), newValues[0]);
+    if (ret != data::ReturnCode::Success) {
+      return CreateReturnCodeResponse(ret);
+    }
+
+    const auto varListDto = dto::VariableListResponse::createShared();
+    varListDto->variables = CreateVariablesList(newValues);
+    varListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
+    return createDtoResponse(Status::CODE_200, varListDto);
+  }
+  ENDPOINT_INFO(SetStackLocal)
+  {
+    info->addResponse<Object<dto::VariableListResponse>>(Status::CODE_200, "application/json");
     AddCommandMessageErrorResponses(info);
   }
 
@@ -125,7 +145,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   }
   ENDPOINT_INFO(StackGlobals)
   {
-    info->addResponse<Object<dto::VariableList>>(Status::CODE_200, "application/json");
+    info->addResponse<Object<dto::VariableListResponse>>(Status::CODE_200, "application/json");
     AddCommandMessagePaginationParams(info);
     AddCommandMessageErrorResponses(info);
   }
@@ -163,7 +183,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
       return CreateReturnCodeResponse(ret);
     }
 
-    const auto varListDto = dto::ImmediateValueList::createShared();
+    const auto varListDto = dto::ImmediateValueListResponse::createShared();
     varListDto->values = List<Object<dto::ImmediateValue>>::createShared();
     for (const auto& [variable, scope, iteratorPath] : values)
     {
@@ -183,7 +203,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
   ENDPOINT_INFO(StackImmediate)
   {
     info->pathParams.add<Int32>("stackFrame").description = "Evaluate the expression in the scope of this stack frame. If -1, the expression is evaluated in the global scope.";
-    info->addResponse<Object<dto::ImmediateValueList>>(Status::CODE_200, "application/json");
+    info->addResponse<Object<dto::ImmediateValueListResponse>>(Status::CODE_200, "application/json");
     AddCommandMessagePaginationParams(info);
     AddCommandMessageErrorResponses(info);
   }
@@ -274,7 +294,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
       return CreateReturnCodeResponse(ret);
     }
 
-    const auto varListDto = dto::VariableList::createShared();
+    const auto varListDto = dto::VariableListResponse::createShared();
     varListDto->variables = CreateVariablesList(variables);
     varListDto->code = static_cast<int32_t>(data::ReturnCode::Success);
     return createDtoResponse(Status::CODE_200, varListDto);
@@ -302,6 +322,7 @@ class DebugCommandController final : public oatpp::web::server::api::ApiControll
     variableDto->childCount = variable.childCount;
     variableDto->instanceClassName = String(
             variable.instanceClassName.c_str(), static_cast<v_buff_size>(variable.instanceClassName.size()), false);
+    variableDto->editable = variable.editable;
     return variableDto;
   }
 

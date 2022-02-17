@@ -80,6 +80,7 @@ struct Variable {
   uint32_t childCount = 0;
   // If valueType is Instance, this is set with the full class name.
   std::string instanceClassName;
+  bool editable = false;
 };
 struct PaginationInfo {
   uint32_t beginIterator;
@@ -157,6 +158,10 @@ class MessageCommandInterface {
 
   [[nodiscard]] virtual data::ReturnCode GetGlobalVariables(
           const std::string& path, const data::PaginationInfo& pagination, std::vector<data::Variable>& variables) = 0;
+
+  [[nodiscard]] virtual data::ReturnCode SetStackVariableValue(
+          uint32_t stackFrame, const std::string& path, const std::string& newValueString, data::Variable& newValue) = 0;
+
 
   /// <summary>
   /// Evaluate the expression in the scope of this stack frame. If -1, the expression is evaluated in the global scope.

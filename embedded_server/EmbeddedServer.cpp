@@ -14,7 +14,9 @@
 #include <oatpp/web/server/HttpConnectionHandler.hpp>
 #include <oatpp/web/server/HttpRouter.hpp>
 
+#ifdef SDB_ENABLE_OATPP_SWAGGER
 #include <oatpp-swagger/Controller.hpp>
+#endif
 
 #include <iostream>
 #include <sstream>
@@ -23,6 +25,7 @@
 #include "controller/StaticController.h"
 #include "controller/WebsocketController.h"
 #include "websocket/WSListener.h"
+
 #include "AppComponents.h"
 
 using oatpp::parser::json::mapping::ObjectMapper;
@@ -91,28 +94,31 @@ class EndpointImpl : public EmbeddedServer {
     OATPP_COMPONENT(std::shared_ptr<oatpp::web::server::handler::ErrorHandler>, errorHandler);
 
     // Controllers
-    std::shared_ptr<oatpp::web::server::api::ApiController::Endpoints> docEndpoints = oatpp::swagger::Controller::Endpoints::createShared();
 
     auto debugCommandController = DebugCommandController::CreateShared(messageCommandInterface);
     debugCommandController->addEndpointsToRouter(router);
     debugCommandController->setErrorHandler(errorHandler);
-    docEndpoints->pushBackAll(debugCommandController->getEndpoints());
     controllers_.push_back(debugCommandController);
 
     auto staticController = StaticController::CreateShared();
     staticController->addEndpointsToRouter(router);
     staticController->setErrorHandler(errorHandler);
-    docEndpoints->pushBackAll(staticController->getEndpoints());
     controllers_.push_back(staticController);
 
     auto websocketController = WebsocketController::CreateShared();
     websocketController->addEndpointsToRouter(router);
     websocketController->setErrorHandler(errorHandler);
-    docEndpoints->pushBackAll(websocketController->getEndpoints());
     controllers_.push_back(websocketController);
 
+#ifdef SDB_ENABLE_OATPP_SWAGGER
+    std::cout << "Using Swagger Resources Path: " << OATPP_SWAGGER_RES_PATH << std::endl;
+    std::shared_ptr<oatpp::web::server::api::ApiController::Endpoints> docEndpoints = oatpp::swagger::Controller::Endpoints::createShared();
+    docEndpoints->pushBackAll(debugCommandController->getEndpoints());
+    docEndpoints->pushBackAll(staticController->getEndpoints());
+    docEndpoints->pushBackAll(websocketController->getEndpoints());
     swaggerController_ = oatpp::swagger::Controller::createShared(docEndpoints);
     swaggerController_->addEndpointsToRouter(router);
+#endif
 
     OATPP_COMPONENT(std::shared_ptr<WSInstanceListener>, webSocketInstanceListener);
     eventInterface_ = std::make_shared<OatMessageEventInterface>(webSocketInstanceListener);
@@ -155,7 +161,10 @@ private:
 
   // Need to keep a reference to the controllers so they aren't deleted.
   std::vector<std::shared_ptr<oatpp::web::server::api::ApiController>> controllers_;
+
+#ifdef SDB_ENABLE_OATPP_SWAGGER
   std::shared_ptr<oatpp::swagger::Controller> swaggerController_;
+#endif
 
   std::shared_ptr<bool> stopping_ = std::make_shared<bool>(false);
   std::thread worker_;
@@ -170,7 +179,6 @@ EmbeddedServer* EmbeddedServer::Create(const uint16_t port)
 }
 
 void EmbeddedServer::InitEnvironment() {
-  std::cout << OATPP_SWAGGER_RES_PATH << std::endl;
   oatpp::base::Environment::init();
   oatpp::base::Environment::setLogger(std::make_shared<ForwardingLogger>());
 }

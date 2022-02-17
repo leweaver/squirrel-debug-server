@@ -4,6 +4,8 @@ project(embedded_server)
 
 set(CMAKE_CXX_STANDARD 17)
 
+option(SDB_ENABLE_OATPP_SWAGGER "Build OATPP-Swagger and add swagger endpoints" ON)
+
 set(SDB_DEPENDENCIES_OATPP "FETCHCONTENT" CACHE STRING "Location where to find oatpp modules. can be [INSTALLED|FETCHCONTENT]")
 set(SDB_DEPENDENCIES_OATPP_INSTALLED INSTALLED)
 set(SDB_DEPENDENCIES_OATPP_FETCHCONTENT FETCHCONTENT)
@@ -53,13 +55,15 @@ if(SDB_DEPENDENCIES_OATPP STREQUAL SDB_DEPENDENCIES_OATPP_FETCHCONTENT)
             GIT_REPOSITORY https://github.com/oatpp/oatpp-websocket.git
             GIT_TAG 36c3ceaf4706e54390d020390081203fa2cc693c
     )
-    set(OATPP_BUILD_TESTS OFF)
+    set(OATPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(oatpp)
 
     set(OATPP_MODULES_LOCATION CUSTOM CACHE STRING "" FORCE)
     set(OATPP_DIR_SRC ${oatpp_SOURCE_DIR} CACHE STRING "" FORCE)
     set(OATPP_DIR_LIB ${oatpp_BINARY_DIR} CACHE STRING "" FORCE)
-    FetchContent_MakeAvailable(oatpp-swagger)
+    if(SDB_ENABLE_OATPP_SWAGGER)
+        FetchContent_MakeAvailable(oatpp-swagger)
+    endif()
 
     FetchContent_MakeAvailable(oatpp-websocket)
 elseif(SDB_DEPENDENCIES_OATPP STREQUAL SDB_DEPENDENCIES_OATPP_INSTALLED)
@@ -68,14 +72,17 @@ else()
     message("FATAL_ERROR Unknown location to find squirrel '${SDB_DEPENDENCIES_OATPP}'")
 endif()
 
-get_target_property(OATPP_SWAGGER_SOURCE_DIR oatpp-swagger SOURCE_DIR)
-add_definitions(
-        ## define path to swagger-ui static resources folder
-        -DOATPP_SWAGGER_RES_PATH="${OATPP_SWAGGER_SOURCE_DIR}/../res"
-        )
+if(SDB_ENABLE_OATPP_SWAGGER)
+    get_target_property(OATPP_SWAGGER_SOURCE_DIR oatpp-swagger SOURCE_DIR)
+    add_definitions(
+            ## define path to swagger-ui static resources folder
+            -DOATPP_SWAGGER_RES_PATH="${OATPP_SWAGGER_SOURCE_DIR}/../res"
+            -DSDB_ENABLE_OATPP_SWAGGER
+    )
+    target_link_libraries(${PROJECT_NAME} oatpp-swagger)
+endif()
 
 target_link_libraries(${PROJECT_NAME}
         sdb::interfaces
         oatpp
-        oatpp-swagger
         oatpp-websocket)

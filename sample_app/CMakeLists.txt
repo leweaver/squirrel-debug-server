@@ -30,7 +30,14 @@ FetchContent_Declare(
     # v1.4
     GIT_TAG 35a173f7897df985697f4c4d282451b9dafe1b61
 )
-FetchContent_MakeAvailable(tclap)
+
+# MakeAvailable will include all the tclap tests. Don't need those, and it doesn't have a flag to disable them.
+# FetchContent_MakeAvailable(tclap)
+FetchContent_GetProperties(tclap)
+if(NOT tclap_POPULATED)
+    FetchContent_Populate(tclap)
+endif()
+
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${tclap_SOURCE_DIR}/include")
 target_link_libraries(${PROJECT_NAME}

@@ -89,10 +89,18 @@ class Variable : public oatpp::DTO {
   DTO_FIELD(UInt64, valueRawAddress);
   DTO_FIELD(UInt32, childCount);
   DTO_FIELD(String, instanceClassName);
+  DTO_FIELD(Boolean, editable);
 };
 
-class VariableList : public CommandMessageResponse {
-  DTO_INIT(VariableList, CommandMessageResponse)
+class VariableSetValueBody : public oatpp::DTO {
+  DTO_INIT(VariableSetValueBody, DTO);
+
+  DTO_FIELD(Enum<VariableType>, valueType);
+  DTO_FIELD(String, value);
+};
+
+class VariableListResponse : public CommandMessageResponse {
+  DTO_INIT(VariableListResponse, CommandMessageResponse)
 
   DTO_FIELD(List<Object<Variable>>, variables);
 };
@@ -105,8 +113,8 @@ class ImmediateValue : public oatpp::DTO {
   DTO_FIELD(List<UInt32>, iteratorPath);
 };
 
-class ImmediateValueList : public CommandMessageResponse {
-  DTO_INIT(ImmediateValueList, CommandMessageResponse)
+class ImmediateValueListResponse : public CommandMessageResponse {
+  DTO_INIT(ImmediateValueListResponse, CommandMessageResponse)
 
   DTO_FIELD(List<Object<ImmediateValue>>, values);
 };

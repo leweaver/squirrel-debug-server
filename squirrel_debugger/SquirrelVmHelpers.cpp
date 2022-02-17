@@ -9,6 +9,9 @@
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
+#include <functional>
+
+const char* const kLogTag = "SquirrelVmHelpers";
 
 const uint32_t kMaxTableSizeToSort = 1000;
 const uint32_t kMaxTableValueStringLength = 20;
@@ -176,6 +179,70 @@ void CreateTableSummary(HSQUIRRELVM v, std::stringstream& ss)
   ss << "}";
 };
 
+ReturnCode UpdateFromString(SQVM* const v, SQInteger objIdx, const std::string& value)
+{
+   // make into absolute positions
+   const auto type = sq_gettype(v, -1);
+
+   // push the new value
+   switch (type) {
+     case OT_BOOL:
+     {
+       SQBool val = value == "true" || value == "1" ? SQTrue : SQFalse;
+       sq_poptop(v);
+       sq_pushbool(v, val);
+       break;
+     }
+     case OT_INTEGER:
+     {
+       SQInteger newVal;
+       try {
+         newVal = std::stoi(value);
+       }
+       catch (const std::logic_error& e) {
+         SDB_LOGE(kLogTag, "UpdateFromString: failed to parse int from %s (%s)", value.c_str(), e.what());
+         return ReturnCode::InvalidParameter;
+       }
+       sq_poptop(v);
+       sq_pushinteger(v, newVal);
+       break;
+     }
+     case OT_FLOAT:
+     {
+       float newVal;
+       try {
+         newVal= std::stof(value);
+       }
+       catch (const std::logic_error& e) {
+         SDB_LOGE(kLogTag, "UpdateFromString: failed to parse float from %s (%s)", value.c_str(), e.what());
+         return ReturnCode::InvalidParameter;
+       }
+       sq_poptop(v);
+       sq_pushfloat(v, newVal);
+       break;
+     }
+     case OT_STRING:
+     {
+       sq_poptop(v);
+       sq_pushstring(v, value.c_str(), SQInteger(value.size()));
+       break;
+     }
+     default:
+       SDB_LOGE(kLogTag, "UpdateFromString: Unsupported variable type");
+       return ReturnCode::InvalidParameter;
+   }
+
+   if (SQ_SUCCEEDED(sq_set(v, objIdx)))
+   {
+     return ReturnCode::Success;
+   }
+   else
+   {
+     SDB_LOGE(kLogTag, "UpdateFromString: Failed to set value due to unknown error");
+     return ReturnCode::ErrorInternal;
+   }
+}
+
 // Simple to_string of the var at the top of the stack.
 std::string ToString(SQVM* const v, const SQInteger idx)
 {
@@ -287,7 +354,7 @@ ReturnCode CreateChildVariable(SQVM* const v, Variable& variable)
         sq_poptop(v);// pop class
       }
       else {
-        SDB_LOGD(__FILE__, "Failed to find classname");
+        SDB_LOGD(kLogTag, "Failed to find classname");
       }
 
       [[fallthrough]];
@@ -308,7 +375,7 @@ ReturnCode CreateChildVariable(SQVM* const v, Variable& variable)
           sq_poptop(v);
         }
         else {
-          SDB_LOGD(__FILE__, "Failed to get delegate");
+          SDB_LOGD(kLogTag, "Failed to get delegate");
         }
         sq_poptop(v);
       }
@@ -320,6 +387,15 @@ ReturnCode CreateChildVariable(SQVM* const v, Variable& variable)
       break;
     default:
       variable.childCount = 0;
+  }
+
+  if (variable.valueType == VariableType::Bool || variable.valueType == VariableType::Float ||
+      variable.valueType == VariableType::Integer || variable.valueType == VariableType::String)
+  {
+    variable.editable = true;
+  }
+  else {
+    variable.editable = false;
   }
 
   return ReturnCode::Success;
@@ -430,16 +506,24 @@ ReturnCode CreateChildVariables(SQVM* const v, const PaginationInfo& pagination,
   return ReturnCode::Success;
 }
 
-ReturnCode CreateChildVariablesFromIterable(
-        SQVM* const v, const std::vector<uint64_t>::const_iterator pathBegin,
-        const std::vector<uint64_t>::const_iterator pathEnd, const PaginationInfo& pagination,
-        std::vector<Variable>& variables)
+data::ReturnCode CreateChildVariablesFromIterable(
+        HSQUIRRELVM vm, PathPartConstIter begin, PathPartConstIter end,
+        const data::PaginationInfo& pagination, std::vector<data::Variable>& variables)
+{
+  return WithVariableAtPath(vm, begin, end, [vm, &pagination, &variables]() {
+    return CreateChildVariables(vm, pagination, variables);
+  });
+}
+
+ReturnCode WithVariableAtPath(
+        SQVM* const v, const PathPartConstIter pathBegin,
+        const PathPartConstIter pathEnd, const std::function<ReturnCode()>& fn)
 {
   ScopedVerifySqTop scopedVerify(v);
 
   if (pathBegin == pathEnd) {
     // Add the children of the variable at the top of the stack to the list.
-    return CreateChildVariables(v, pagination, variables);
+    return fn();
   }
 
   std::stringstream ss;
@@ -452,17 +536,17 @@ ReturnCode CreateChildVariablesFromIterable(
       const auto arrSize = sq_getsize(v, -1);
       const int arrIndex = static_cast<int>(*pathBegin);
       if (arrIndex >= arrSize) {
-        SDB_LOGD(__FILE__, "Array index %d out of bounds", *pathBegin);
+        SDB_LOGD(kLogTag, "Array index %d out of bounds", *pathBegin);
         return ReturnCode::InvalidParameter;
       }
 
       sq_pushinteger(v, arrIndex);
       const auto sqRetVal = sq_get(v, -2);
       if (!SQ_SUCCEEDED(sqRetVal)) {
-        SDB_LOGD(__FILE__, "Failed to get array index %d", arrIndex);
+        SDB_LOGD(kLogTag, "Failed to get array index %d", arrIndex);
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = CreateChildVariablesFromIterable(v, pathBegin + 1, pathEnd, pagination, variables);
+      const auto childRetVal = WithVariableAtPath(v, pathBegin + 1, pathEnd, fn);
       sq_poptop(v);// pop value
       return childRetVal;
     }
@@ -471,16 +555,16 @@ ReturnCode CreateChildVariablesFromIterable(
     {
       sq_pushinteger(v, *pathBegin);
       if (!SQ_SUCCEEDED(sq_next(v, -2))) {
-        SDB_LOGD(__FILE__, "Failed to read iterator %d", *pathBegin);
+        SDB_LOGD(kLogTag, "Failed to read iterator %d", *pathBegin);
         sq_poptop(v);// pop iterator
         return ReturnCode::InvalidParameter;
       }
-      const auto childRetVal = CreateChildVariablesFromIterable(v, pathBegin + 1, pathEnd, pagination, variables);
+      const auto childRetVal = WithVariableAtPath(v, pathBegin + 1, pathEnd, fn);
       sq_pop(v, 3);// pop value, key and iterator
       return childRetVal;
     }
     default:
-      SDB_LOGD(__FILE__, "Iterator points to non iterable type: %d", type);
+      SDB_LOGD(kLogTag, "Iterator points to non iterable type: %d", type);
       return ReturnCode::InvalidParameter;
   }
 }
@@ -494,7 +578,7 @@ ReturnCode GetObjectFromExpression(
   if (expressionNode == nullptr) {
     // Add the variable at the top of the stack to the list.
     if (!SQ_SUCCEEDED(sq_getstackobj(v, -1, &foundObject))) {
-      SDB_LOGD(__FILE__, "Failed to read object from the stack");
+      SDB_LOGD(kLogTag, "Failed to read object from the stack");
       return ReturnCode::ErrorInternal;
     }
     return ReturnCode::Success;
@@ -508,7 +592,7 @@ ReturnCode GetObjectFromExpression(
     case OT_ARRAY:
     {
       if (!sq_isnumeric(expressionNode->accessorObject)) {
-        SDB_LOGD(__FILE__, "Failed to get from array, key is not numeric.");
+        SDB_LOGD(kLogTag, "Failed to get from array, key is not numeric.");
         return ReturnCode::InvalidParameter;
       }
 
@@ -517,7 +601,7 @@ ReturnCode GetObjectFromExpression(
       sq_getinteger(v, -1, &arrIndex);
       const auto sqRetVal = sq_get(v, -2);
       if (!SQ_SUCCEEDED(sqRetVal)) {
-        SDB_LOGD(__FILE__, "Failed to get array index %d", arrIndex);
+        SDB_LOGD(kLogTag, "Failed to get array index %d", arrIndex);
         return ReturnCode::InvalidParameter;
       }
 
@@ -533,7 +617,7 @@ ReturnCode GetObjectFromExpression(
       // Get the object that we're looking for, so we can iterate through all keys to find the iterator we want.
       sq_pushobject(v, expressionNode->accessorObject);
       if (!SQ_SUCCEEDED(sq_get(v, -2))) {
-        SDB_LOGD(__FILE__, "Failed to read accessor");
+        SDB_LOGD(kLogTag, "Failed to read accessor");
         return ReturnCode::InvalidParameter;
       }
 
@@ -555,11 +639,11 @@ ReturnCode GetObjectFromExpression(
       sq_poptop(v);// pop initially found value
 
       // Didn't find anything
-      SDB_LOGD(__FILE__, "No matching key in table");
+      SDB_LOGD(kLogTag, "No matching key in table");
       return ReturnCode::InvalidParameter;
     }
     default:
-      SDB_LOGD(__FILE__, "Iterator points to non iterable type: %d", type);
+      SDB_LOGD(kLogTag, "Iterator points to non iterable type: %d", type);
       return ReturnCode::InvalidParameter;
   }
 }
