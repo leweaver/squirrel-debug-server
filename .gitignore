@@ -49,7 +49,9 @@ Thumbs.db
 *.wmv
 
 cmake-build-debug/
+cmake-build-release/
 .vs/
 *.user
 out/
 /build
+/Testing/Temporary/CTestCostData.txt

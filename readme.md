@@ -14,6 +14,8 @@ Also included (but optional) is an HTTP server that provides remote-debug capabi
 - *embedded_server* 
     - uses OATPP to host an HTTP server. This acts as an endpoint for debug user interfaces to control the application. 
     - Provides an implementation of `MessageEventInterface`.
+    - Exposes a "Swagger" interface that's accessible via the browser. Located by default at http://localhost:8000/swagger/ui. 
+    - Swagger can be disabled by setting the cmake option `SDB_ENABLE_OATPP_SWAGGER=OFF`. This will save ~200KB binary size in release builds.  
 - *squirrel_debugger* 
     - Implementation of the Squirrel Debug API. Uses semaphores to lock the squirrel execution thread at breakpoints, and provides access to VM stack & variables.
     - Provides an implementation of `MessageCommandInterface`.
@@ -35,15 +37,16 @@ First versioned release, 'MVP'
 [x] Global Variables
 [x] Simple Breakpoints
 [x] Output redirection & capture
+[x] Disablement of the swagger UI on startup
+[x] Modification of variable values (int, bool, float and string only.)
 
 ## Not Currently Supported
 [ ] Multiple VM's (threads)
 [ ] Conditional breakpoints
-[ ] Modification of variable values (int and string only?)
 [ ] Immediate window for execution
 [ ] MacOS / Linux support
 [ ] squirrel unicode builds
-[ ] Disablement of the swagger UI on startup
+[ ] Modification of local & free variables. (No need to support modification of globals)
 
 # Building Sample from source using CMake
 Currently, only support building on windows using CMake. This requires that you have Visual Studio 2019 installed.

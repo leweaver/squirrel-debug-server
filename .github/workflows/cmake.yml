@@ -24,15 +24,23 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DSDB_BUILD_TESTING=ON && cmake -B ${{github.workspace}}/build_noswagger -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DSDB_ENABLE_OATPP_SWAGGER=OFF
 
-    - name: Build
+    - name: Build Sample App
       # Build your program with the given configuration
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target "sample_app"
+
+    - name: Build Sample App (No Swagger)
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build_noswagger --config ${{env.BUILD_TYPE}} --target "sample_app"
+
+    - name: Build Tests
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target "squirrel_debugger_tests"
 
     - name: Test
       working-directory: ${{github.workspace}}/build
       # Execute tests defined by the CMake configuration.  
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest -C ${{env.BUILD_TYPE}}
+      run: ctest --output-on-failure -C ${{env.BUILD_TYPE}}
       

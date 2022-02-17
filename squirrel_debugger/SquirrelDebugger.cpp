@@ -15,6 +15,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <functional>
 
 using sdb::SquirrelDebugger;
 using sdb::data::ImmediateValue;
@@ -27,6 +28,7 @@ using sdb::data::Variable;
 
 using sdb::sq::CreateChildVariable;
 using sdb::sq::CreateChildVariablesFromIterable;
+using sdb::sq::WithVariableAtPath;
 using sdb::sq::GetObjectFromExpression;
 using sdb::sq::ExpressionNode;
 using sdb::sq::ExpressionNodeType;
@@ -73,65 +75,95 @@ struct SquirrelVmDataImpl {
   }
 
   ReturnCode PopulateStackVariables(
-          int32_t stackFrame, const std::string& path, const PaginationInfo& pagination,
+          uint32_t stackFrame, const std::string& path, const PaginationInfo& pagination,
           std::vector<Variable>& stack) const
   {
-    ScopedVerifySqTop scopedVerify(vm);
-
-    std::vector<uint64_t> pathParts;
-    if (!path.empty()) {
-      // Convert comma-separated list to vector
-      std::stringstream s_stream(path);
-      while (s_stream.good()) {
-        std::string substr;
-        getline(s_stream, substr, ',');
-        pathParts.emplace_back(stoi(substr));
-      }
+    if (path.empty())
+    {
+      // List out locals and free variables
+      return WithStackRootVariables(stackFrame, path, pagination, stack, [vm = this->vm](Variable& variable) {
+        auto rc = CreateChildVariable(vm, variable);
+        // Can't edit locals and free variables right now.
+        variable.editable = false;
+        return rc;
+      });
     }
-
-    ReturnCode rc = ReturnCode::Success;
-    if (pathParts.begin() == pathParts.end()) {
-      const auto maxNSeq = pagination.beginIterator + pagination.count;
-      for (SQUnsignedInteger nSeq = pagination.beginIterator; nSeq < maxNSeq; ++nSeq) {
-        // Push local with given index to stack
-        const auto* const localName = sq_getlocal(vm, stackFrame, nSeq);
-        if (localName == nullptr) {
-          break;
-        }
-
-        Variable variable;
-        variable.pathIterator = nSeq;
-        variable.pathUiString = localName;
-        rc = CreateChildVariable(vm, variable);
-
-        // Remove local from stack
-        sq_poptop(vm);
-
-        if (rc != ReturnCode::Success) {
-          break;
-        }
-        stack.emplace_back(std::move(variable));
-      }
+    else
+    {
+      return WithStackVariables(
+              stackFrame, path,
+              [vm = this->vm, &pagination, &stack](const sq::PathPartConstIter& begin, const sq::PathPartConstIter& end) {
+                return sq::CreateChildVariablesFromIterable(vm, begin + 1, end, pagination, stack);
+              });
     }
-    else {
+  }
+
+  ReturnCode WithStackRootVariables(uint32_t stackFrame, const std::string& path, const PaginationInfo& pagination, std::vector<Variable>& stack, const std::function<ReturnCode(Variable&)>& fn) const
+  {
+    ReturnCode rc {};
+    const auto maxNSeq = pagination.beginIterator + pagination.count;
+    for (SQUnsignedInteger nSeq = pagination.beginIterator; nSeq < maxNSeq; ++nSeq) {
       // Push local with given index to stack
-      const auto* const localName = sq_getlocal(vm, stackFrame, *pathParts.begin());
+      const auto* const localName = sq_getlocal(vm, stackFrame, nSeq);
       if (localName == nullptr) {
-        SDB_LOGD(__FILE__, "No local with given index: %d", *pathParts.begin());
-        return ReturnCode::InvalidParameter;
+        break;
       }
 
-      rc = CreateChildVariablesFromIterable(vm, pathParts.begin() + 1, pathParts.end(), pagination, stack);
-      if (rc != ReturnCode::Success) {
-        SDB_LOGI(__FILE__, "Failed to find stack variables for path: %s", path.c_str());
-      }
+      Variable variable;
+      variable.pathIterator = nSeq;
+      variable.pathUiString = localName;
+      rc = fn(variable);
 
       // Remove local from stack
       sq_poptop(vm);
+
+      if (rc != ReturnCode::Success) {
+        break;
+      }
+
+      // Can't edit root variables/globals right now
+      variable.editable = false;
+      stack.emplace_back(std::move(variable));
     }
+    return rc;
+  }
+
+  ReturnCode WithStackVariables(uint32_t stackFrame, const std::string& path, const std::function<ReturnCode(const sq::PathPartConstIter&, const sq::PathPartConstIter&)>& fn) const
+  {
+    if (path.empty()) {
+      SDB_LOGE(kLogTag, "WithStackRootVariables must be called when path is empty.");
+      return ReturnCode::ErrorInternal;
+    }
+
+    ScopedVerifySqTop scopedVerify(vm);
+    std::vector<uint64_t> pathParts;
+      // Convert comma-separated list to vector
+      std::stringstream ss(path);
+      while (ss.good()) {
+        std::string substr;
+        getline(ss, substr, SquirrelDebugger::kPathSeparator);
+        pathParts.emplace_back(stoi(substr));
+      }
+
+    ReturnCode rc {};
+    // Push local with given index to stack
+    const auto* const localName = sq_getlocal(vm, stackFrame, *pathParts.begin());
+    if (localName == nullptr) {
+      SDB_LOGD(kLogTag, "No local with given index: %d", *pathParts.begin());
+      return ReturnCode::InvalidParameter;
+    }
+
+    rc = fn(pathParts.begin(), pathParts.end());
+    if (rc != ReturnCode::Success) {
+      SDB_LOGI(kLogTag, "Failed to find stack variables for path: %s", path.c_str());
+    }
+
+    // Remove local from stack
+    sq_poptop(vm);
 
     return rc;
   }
+
   ReturnCode
   PopulateGlobalVariables(const std::string& path, const PaginationInfo& pagination, std::vector<Variable>& stack) const
   {
@@ -140,10 +172,10 @@ struct SquirrelVmDataImpl {
     std::vector<uint64_t> pathParts;
     if (!path.empty()) {
       // Convert comma-separated list to vector
-      std::stringstream s_stream(path);
-      while (s_stream.good()) {
+      std::stringstream ss(path);
+      while (ss.good()) {
         std::string substr;
-        getline(s_stream, substr, ',');
+        getline(ss, substr, ',');
         pathParts.emplace_back(stoi(substr));
       }
     }
@@ -153,6 +185,39 @@ struct SquirrelVmDataImpl {
     sq_poptop(vm);
 
     return rc;
+  }
+
+  ReturnCode SetStackVariableValue(uint32_t stackFrame, const std::string& path, const std::string& newValueString, data::Variable& newValue) {
+    return WithStackVariables(stackFrame, path, [vm=this->vm, &newValueString, &newValue](sq::PathPartConstIter begin, sq::PathPartConstIter end) -> ReturnCode {
+      if (begin + 1 == end) {
+        // In this case, attempting to set a local var directly. Need to do something else
+        // TODO: there's no set equiv of sq_getlocal(), as getlocal contains both local and free variables.
+        SDB_LOGE(kLogTag, "SetStackVariableValue: Can't set value of local & function arguments.");
+        return ReturnCode::InvalidParameter;
+      }
+      return sq::WithVariableAtPath(vm, begin + 1, end, [end, vm, &newValueString, &newValue]() -> ReturnCode {
+        // obj at -3, key is at -2, current value at -1
+
+        // need to copy the key as it is consumed by the update method.
+        HSQOBJECT key = {};
+        sq_getstackobj(vm, -2, &key);
+
+        ReturnCode rc = sq::UpdateFromString(vm, -4, newValueString);
+
+        if (ReturnCode::Success != rc) {
+          return rc;
+        }
+
+        // Re-add key and new value
+        sq_pushobject(vm, key);
+        sq_pushobject(vm, key); // value replaces the key in the lookup, so need to add key twice
+        if (!SQ_SUCCEEDED(sq_get(vm, -4))) {
+          SDB_LOGE(kLogTag, "Failed to read new value of property");
+          return data::ReturnCode::Invalid;
+        }
+        return sq::CreateChildVariable(vm, newValue);
+      });
+    });
   }
 
   HSQUIRRELVM vm = nullptr;
@@ -186,7 +251,30 @@ void SquirrelDebugger::SetEventInterface(std::shared_ptr<MessageEventInterface> 
 void SquirrelDebugger::AddVm(SQVM* const vm)
 {
   // TODO: Multiple VM support
+  if (!eventInterface_)
+  {
+    SDB_LOGW(kLogTag, "AddVm: No event interface has been added! Events will not be sent.");
+  }
   vmData_->vm = vm;
+}
+
+void SquirrelDebugger::DetachVm(SQVM* const vm)
+{
+  SDB_LOGI(kLogTag, "Detaching debugger");
+  if (vmData_ != nullptr && vmData_->vm != nullptr) {
+    std::lock_guard lock(pauseMutex_);
+    pauseMutexData_->isPaused = false; // ensures that public method calls return an error
+
+    if (pauseRequested_ != PauseType::None) {
+      // resume execution of the script
+      pauseRequested_ = PauseType::None;
+      pauseCv_.notify_all();
+    }
+
+    vmData_->vm = nullptr;
+    vmData_->currentStack.clear();
+    vmData_->fileNameHandles.clear();
+  }
 }
 
 ReturnCode SquirrelDebugger::PauseExecution()
@@ -213,7 +301,7 @@ ReturnCode SquirrelDebugger::ContinueExecution()
       return ReturnCode::Success;
     }
   }
-  SDB_LOGD(__FILE__, "cannot continue, not paused.");
+  SDB_LOGD(kLogTag, "cannot continue, not paused.");
   return ReturnCode::InvalidNotPaused;
 }
 
@@ -242,12 +330,12 @@ ReturnCode SquirrelDebugger::GetStackVariables(
   SDB_LOGD(kLogTag, "GetStackVariables");
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
-    SDB_LOGD(__FILE__, "cannot retrieve stack variables, not paused.");
+    SDB_LOGD(kLogTag, "cannot retrieve stack variables, not paused.");
     return ReturnCode::InvalidNotPaused;
   }
 
   if (stackFrame > vmData_->currentStack.size()) {
-    SDB_LOGD(__FILE__, "cannot retrieve stack variables, requested stack frame exceeds current stack depth");
+    SDB_LOGD(kLogTag, "cannot retrieve stack variables, requested stack frame exceeds current stack depth");
     return ReturnCode::InvalidParameter;
   }
   return vmData_->PopulateStackVariables(stackFrame, path, pagination, variables);
@@ -259,11 +347,27 @@ ReturnCode SquirrelDebugger::GetGlobalVariables(
   SDB_LOGD(kLogTag, "GetGlobalVariables");
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
-    SDB_LOGD(__FILE__, "cannot retrieve global variables, not paused.");
+    SDB_LOGD(kLogTag, "cannot retrieve global variables, not paused.");
     return ReturnCode::InvalidNotPaused;
   }
 
   return vmData_->PopulateGlobalVariables(path, pagination, variables);
+}
+
+ReturnCode SquirrelDebugger::SetStackVariableValue(uint32_t stackFrame, const std::string& path, const std::string& newValueString, data::Variable& newValue)
+{
+  SDB_LOGD(kLogTag, "SetStackVariableValue");
+  std::lock_guard lock(pauseMutex_);
+  if (!pauseMutexData_->isPaused) {
+    SDB_LOGD(kLogTag, "cannot set stack variable, not paused.");
+    return ReturnCode::InvalidNotPaused;
+  }
+
+  if (stackFrame > vmData_->currentStack.size()) {
+    SDB_LOGD(kLogTag, "cannot retrieve stack variables, requested stack frame exceeds current stack depth");
+    return ReturnCode::InvalidParameter;
+  }
+  return vmData_->SetStackVariableValue(stackFrame, path, newValueString, newValue);
 }
 
 void PrintNode(ExpressionNode* node)
@@ -405,7 +509,7 @@ ReturnCode SquirrelDebugger::GetImmediateValue(
             const int intVal = strtol(node->accessorValue.c_str(), nullptr, 10);
             if (errno == ERANGE) {
               SDB_LOGD(
-                      __FILE__, "expressionNode value %s exceeds maximum parsable integer.",
+                      kLogTag, "expressionNode value %s exceeds maximum parsable integer.",
                       node->accessorValue.c_str());
               return ReturnCode::InvalidParameter;
             }
@@ -560,7 +664,7 @@ ReturnCode SquirrelDebugger::Step(const PauseType pauseType, const int returnsRe
 {
   std::lock_guard lock(pauseMutex_);
   if (!pauseMutexData_->isPaused) {
-    SDB_LOGD(__FILE__, "cannot step, not paused.");
+    SDB_LOGD(kLogTag, "cannot step, not paused.");
     return ReturnCode::InvalidNotPaused;
   }
 
@@ -595,7 +699,9 @@ ReturnCode SquirrelDebugger::SendStatus()
     }
   }
 
-  eventInterface_->HandleStatusChanged(status);
+  if (eventInterface_) {
+    eventInterface_->HandleStatusChanged(status);
+  }
   return ReturnCode::Success;
 }
 
@@ -603,6 +709,11 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
         SQVM* const /*v*/, const SQInteger type, const SQChar* sourceName, const SQInteger line,
         const SQChar* functionName)
 {
+  if (!vmData_->vm) {
+    // Not currently attached.
+    return;
+  }
+
   // 'c' called when a function has been called
   if (type == 'c') {
     const auto fileNameHandlePos = vmData_->fileNameHandles.find(sourceName);
@@ -664,8 +775,9 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
       status.pausedAtBreakpointId = bp.id;
 
       vmData_->PopulateStack(status.stack);
-
-      eventInterface_->HandleStatusChanged(status);
+      if (eventInterface_) {
+        eventInterface_->HandleStatusChanged(status);
+      }
 
       // This Cv will be signaled whenever the value of pauseRequested_ changes.
       pauseCv_.wait(lock);
@@ -676,6 +788,11 @@ void SquirrelDebugger::SquirrelNativeDebugHook(
 
 void SquirrelDebugger::SquirrelPrintCallback(HSQUIRRELVM vm, const bool isErr, const std::string_view str) const
 {
+  if (!vmData_->vm) {
+    // Not currently attached.
+    return;
+  }
+
   const auto& stackInfo = vmData_->currentStack.back();
   uint32_t line = 0;
   if (stackInfo.line > 0 && stackInfo.line <= INT32_MAX) {
@@ -688,7 +805,9 @@ void SquirrelDebugger::SquirrelPrintCallback(HSQUIRRELVM vm, const bool isErr, c
           std::string_view(stackInfo.fileNameHandle.get()->data(), stackInfo.fileNameHandle.get()->size()),
           line,
   };
-  eventInterface_->HandleOutputLine(outputLine);
+  if (eventInterface_) {
+    eventInterface_->HandleOutputLine(outputLine);
+  }
 }
 
 

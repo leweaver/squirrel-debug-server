@@ -22,6 +22,8 @@ struct SquirrelVmDataImpl;
 
 class SquirrelDebugger final : public MessageCommandInterface {
  public:
+  static constexpr const char kPathSeparator = ',';
+
   SquirrelDebugger();
   ~SquirrelDebugger() override;
 
@@ -34,6 +36,7 @@ class SquirrelDebugger final : public MessageCommandInterface {
   // Initialization - should be called before any threads are started.
   void SetEventInterface(std::shared_ptr<MessageEventInterface> eventInterface);
   void AddVm(HSQUIRRELVM vm);
+  void DetachVm(HSQUIRRELVM vm);
 
   // The following methods may be called from any thread.
   [[nodiscard]] data::ReturnCode PauseExecution() override;
@@ -49,6 +52,9 @@ class SquirrelDebugger final : public MessageCommandInterface {
   [[nodiscard]] data::ReturnCode GetGlobalVariables(
           const std::string& path, const data::PaginationInfo& pagination,
           std::vector<data::Variable>& variables) override;
+
+  [[nodiscard]] data::ReturnCode SetStackVariableValue(
+          uint32_t stackFrame, const std::string& path, const std::string& newValueString, data::Variable& newValue) override;
 
   [[nodiscard]] data::ReturnCode SetFileBreakpoints(
           const std::string& file, const std::vector<data::CreateBreakpoint>& createBps,

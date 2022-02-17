@@ -7,6 +7,12 @@ project(vscode_quirrel_debugger)
 
 set(CMAKE_CXX_STANDARD 17)
 
+set(SDB_BUILD_TESTING OFF CACHE BOOL "Enable unit tests")
+
+if(SDB_BUILD_TESTING)
+    enable_testing()
+endif()
+
 add_subdirectory(interfaces)
 add_subdirectory(embedded_server)
 add_subdirectory(squirrel_debugger)
