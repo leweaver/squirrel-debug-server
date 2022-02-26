@@ -5,6 +5,7 @@
 #ifdef SDB_ENABLE_OATPP_SWAGGER
 #include "oatpp-swagger/Model.hpp"
 #include "oatpp-swagger/Resources.hpp"
+#include "oatpp-swagger/Generator.hpp"
 
 #include <sstream>
 #endif
@@ -57,6 +58,9 @@ class SwaggerComponent {
    */
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::swagger::Resources>, swaggerResources)
   ([] { return oatpp::swagger::Resources::loadResources(OATPP_SWAGGER_RES_PATH); }());
+
+  OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::swagger::Generator::Config>, swaggerGeneratorConfig)
+  ([] { return std::make_shared<oatpp::swagger::Generator::Config>(); }());
 };
 #else
 class SwaggerComponent {

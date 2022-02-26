@@ -19,7 +19,6 @@
 #endif
 
 #include <iostream>
-#include <sstream>
 
 #include "controller/DebugCommandController.h"
 #include "controller/StaticController.h"
